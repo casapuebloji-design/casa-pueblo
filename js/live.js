@@ -11,9 +11,9 @@ const Live = {
   saving: null,
   dirty: false,
 
-  // Live unless the config is empty or the visitor chose the demo.
+  // Live only on app.html (CASA_MODE = 'live') and once the config is filled. index.html stays the demo.
   enabled() {
-    return !!(window.CASA_CONFIG && CASA_CONFIG.url && CASA_CONFIG.key && window.supabase) && localStorage.getItem('casa-mode') !== 'demo';
+    return window.CASA_MODE === 'live' && !!(window.CASA_CONFIG && CASA_CONFIG.url && CASA_CONFIG.key && window.supabase);
   },
 
   async init() {

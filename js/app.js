@@ -17,6 +17,7 @@ const CLIENT_TABS = [['home', 'home', 'ראשי'], ['plans', 'plans', 'תכני�
 
 const STAFF_NAV = [
   ['bo-home', 'grid', 'כל הפרויקטים'],
+  ['bo-leads', 'list', 'על הפרק'],
   ['bo-project', 'building', 'בית אברהמי'],
   ['bo-weekly', 'send', 'סיכום שבועי'],
   ['bo-new', 'plus', 'פרויקט חדש'],
@@ -49,7 +50,7 @@ const App = {
     const app = document.getElementById('app');
     if (!Store.session) { document.body.className = 'theme-navy'; app.innerHTML = Store.live ? liveLoginView() : loginView(); (Store.live ? mountLiveLogin : mountLogin)(app); return; }
     if (Store.live && !Store.data) { document.body.className = 'theme-navy'; app.innerHTML = noProjectView(); app.querySelector('#np-out').onclick = logout; return; }
-    STAFF_NAV[1][2] = Store.data.project.name || 'הפרויקט';
+    STAFF_NAV.find((n) => n[0] === 'bo-project')[2] = Store.data.project.name || 'הפרויקט';
 
     const r = this.parse();
     const staff = this.isStaffView();
@@ -105,7 +106,7 @@ function loginView() {
           <button type="button" class="btn btn-ghost" data-demo="client"><span>כניסה כלקוח</span><span class="tag">משפחת אברהמי</span></button>
           <button type="button" class="btn btn-ghost" data-demo="staff"><span>כניסה כצוות קאסה פואבלו</span><span class="tag">Back Office</span></button>
         </div>
-        ${window.CASA_CONFIG && CASA_CONFIG.url ? '<p class="small" style="text-align:center;margin-top:14px"><button type="button" class="link-btn" id="lg-real">חזרה לכניסה למערכת</button></p>' : ''}
+        ${window.CASA_CONFIG && CASA_CONFIG.url ? '<p class="small" style="text-align:center;margin-top:14px"><a class="link-btn" href="app.html">כניסה למערכת האמיתית</a></p>' : ''}
       </form>
     </div>
   </div>`;
@@ -151,7 +152,7 @@ function mountLiveLogin(app) {
       err.textContent = /rate|seconds/i.test(ex.message) ? 'נשלחו כבר כמה קישורים. כדאי לחכות דקה ולנסות שוב.' : 'לא הצלחנו לשלוח את הקישור: ' + ex.message;
     }
   };
-  app.querySelector('#lg-demo').onclick = () => { localStorage.setItem('casa-mode', 'demo'); location.href = location.pathname; };
+  app.querySelector('#lg-demo').onclick = () => { location.href = 'index.html'; };
 }
 
 function noProjectView() {
@@ -181,8 +182,6 @@ function mountLogin(app) {
     login('client');
   };
   app.querySelectorAll('[data-demo]').forEach((b) => (b.onclick = () => login(b.dataset.demo)));
-  const real = app.querySelector('#lg-real');
-  if (real) real.onclick = () => { localStorage.removeItem('casa-mode'); location.href = location.pathname; };
   app.querySelector('#lg-forgot').onclick = () => openModal({
     title: 'איפוס סיסמה',
     body: `<p class="ink-2" style="margin-top:0">נשלח קישור לאיפוס הסיסמה למייל או לטלפון שרשומים אצלנו.</p>
@@ -455,7 +454,13 @@ async function bootLive() {
   App.render();
 }
 window.addEventListener('beforeunload', (e) => { if (Store.live && (Live.dirty || Live.saving)) { Live.flush(); e.preventDefault(); e.returnValue = ''; } });
-if (Live.enabled()) {
+if (window.CASA_MODE === 'live' && !Live.enabled()) {
+  // app.html before the database is connected: say so instead of silently showing the demo.
+  document.body.className = 'theme-navy';
+  document.getElementById('app').innerHTML = `<div class="login-panel" style="min-height:100vh"><div class="login-box">${wordmark('lg')}
+    <h1>המערכת בהקמה</h1><p class="lede">עוד רגע זה עולה. בינתיים אפשר להסתכל באב־הטיפוס.</p>
+    <a class="btn btn-primary btn-block" href="index.html">לאב־הטיפוס</a></div></div>`;
+} else if (Live.enabled()) {
   window.addEventListener('hashchange', () => { closeAllModals(); App.render(); });
   bootLive();
 } else {

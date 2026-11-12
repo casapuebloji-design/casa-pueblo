@@ -545,23 +545,30 @@ Pages['bo-audit'] = () => ({
 });
 
 /* ---------- פרויקט חדש ---------- */
-Pages['bo-new'] = () => (!isJorge() ? { title: 'פרויקט חדש', html: '<div class="page-head"><div><h1>פרויקט חדש</h1><p>רק חורחה פותח פרויקטים חדשים.</p></div></div>', mount() {} } : {
+// Real team names for the project-manager and designer fields (free text, so anyone can be typed).
+const STAFF_PICK = ['חורחה עברין', 'יניב', 'עינב', 'אלכס', 'אולג'];
+function leadFor(q) { const id = q && q.lead; return id ? (Leads.list() || []).find((l) => String(l.id) === id) : null; }
+
+Pages['bo-new'] = (q) => { const L = leadFor(q) || {}; return (!isJorge() ? { title: 'פרויקט חדש', html: '<div class="page-head"><div><h1>פרויקט חדש</h1><p>רק חורחה פותח פרויקטים חדשים.</p></div></div>', mount() {} } : {
   title: 'פרויקט חדש',
   html: `
-    <div class="page-head"><div><a class="link-btn small" href="#/bo-home">← כל הפרויקטים</a><h1 style="margin-top:4px">פרויקט חדש</h1><p>אחרי השמירה אפשר לשלוח ללקוחות הזמנה לפתיחת משתמש</p></div></div>
+    <div class="page-head"><div><a class="link-btn small" href="#/bo-home">← כל הפרויקטים</a><h1 style="margin-top:4px">פרויקט חדש</h1><p>${L.id ? `מתוך "על הפרק": ${esc(L.client)}. הפרטים מולאו מהרשימה, ואפשר לשנות.` : 'אחרי השמירה אפשר לשלוח ללקוחות הזמנה לפתיחת משתמש'}</p></div></div>
     <form class="card card-pad" id="np" style="max-width:760px">
       <div class="form-grid two">
-        <label class="field"><span>שם הפרויקט</span><input class="input" name="name" required placeholder="למשל: בית כהן"></label>
-        <label class="field"><span>שם המשפחה</span><input class="input" name="family" required></label>
-        <label class="field" style="grid-column:1/-1"><span>כתובת</span><input class="input" name="address"></label>
+        <label class="field"><span>שם הפרויקט</span><input class="input" name="name" required placeholder="למשל: בית כהן" value="${esc(L.client ? 'בית ' + L.client.replace(/^משפחת\s+/, '') : '')}"></label>
+        <label class="field"><span>שם המשפחה</span><input class="input" name="family" required value="${esc((L.client || '').replace(/^משפחת\s+/, ''))}"></label>
+        <label class="field" style="grid-column:1/-1"><span>כתובת</span><input class="input" name="address" value="${esc(L.city || '')}"></label>
         <label class="field"><span>לקוח ראשי – שם</span><input class="input" name="c1"></label>
-        <label class="field"><span>לקוח ראשי – אימייל / טלפון</span><input class="input" name="c1c"></label>
+        <label class="field"><span>לקוח ראשי – אימייל / טלפון</span><input class="input" name="c1c" value="${esc(L.phone || '')}"></label>
         <label class="field"><span>לקוח נוסף – שם</span><input class="input" name="c2"></label>
         <label class="field"><span>לקוח נוסף – אימייל / טלפון</span><input class="input" name="c2c"></label>
-        <label class="field"><span>מנהל פרויקט</span><select class="input" name="pm"><option>חורחה עברין</option><option>עדי פרידמן</option></select></label>
-        <label class="field"><span>אדריכלית / מעצבת</span><select class="input" name="arch"><option>דנה לוין</option><option>שני ברק</option></select></label>
-        <label class="field"><span>תאריך התחלה</span><input class="input" type="date" name="start" value="${TODAY}"></label>
-        <label class="field"><span>תאריך יעד</span><input class="input" type="date" name="end"></label>
+        <label class="field"><span>מנהל פרויקט</span><input class="input" name="pm" list="team-names" value="חורחה עברין"></label>
+        <label class="field"><span>אדריכלית / מעצבת</span><input class="input" name="arch" list="team-names" value="${esc(L.designer || '')}"></label>
+        <datalist id="team-names">${STAFF_PICK.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+        <label class="field"><span>סוג הפרויקט</span><select class="input" name="ptype">${PROJECT_TYPES.map((t) => `<option ${t === L.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        <label class="field"><span>סכום השיפוץ (₪)</span><input class="input" type="number" name="amount" inputmode="numeric" value="${esc(L.amount || '')}"></label>
+        <label class="field"><span>תאריך התחלה</span><input class="input" type="date" name="start" value="${L.start_month ? L.start_month + '-01' : TODAY}"></label>
+        <label class="field"><span>תאריך יעד</span><input class="input" type="date" name="end" value="${L.start_month && L.duration_months ? (() => { const [y, m] = L.start_month.split('-').map(Number); const d = new Date(y, m - 1 + Number(L.duration_months), 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; })() : ''}"></label>
         <label class="field"><span>תקציב כולל של המשפחה (לא חובה)</span><input class="input" type="number" name="budget" inputmode="numeric"></label>
         <label class="field"><span>תמונה ראשית</span><input class="input" type="file" name="img" accept="image/*"></label>
       </div>
@@ -578,19 +585,21 @@ Pages['bo-new'] = () => (!isJorge() ? { title: 'פרויקט חדש', html: '<di
         const btn = e.target.querySelector('[type=submit]');
         btn.disabled = true;
         try {
-          await createLiveProject(f);
+          const pid = await createLiveProject(f);
+          if (L.id) await Leads.save({ ...L, status: 'won', project_id: pid }).catch(() => {});
           App.go('bo-project');
         } catch (ex) { btn.disabled = false; toast('יצירת הפרויקט נכשלה: ' + ex.message); }
         return;
       }
       Store.data.portfolio.push({ id: 'p' + Date.now(), name: f.get('name'), client: `משפחת ${f.get('family')}`, city: (f.get('address') || '').split(',').pop().trim() || '—', pm: f.get('pm'), stage: 'אפיון ופרוגרמה', progress: 0, openTasks: 0, pendingApprovals: 0, schedule: 'ok', alerts: 0, img: 'assets/img/t-102.jpg' });
       Store.log(`יצר פרויקט חדש: ${f.get('name')}`, TEAM.pm.name);
+      if (L.id) Leads.save({ ...L, status: 'won', project_id: 'demo' });
       Store.save();
       toast(f.get('invite') ? 'הפרויקט נוצר וההזמנות נשלחו ללקוחות' : 'הפרויקט נוצר');
       App.go('bo-home');
     };
   },
-});
+}); };
 
 // Creates the project row, uploads its cover photo and invites the family by email.
 async function createLiveProject(f) {
@@ -605,6 +614,8 @@ async function createLiveProject(f) {
     name: f.get('name'), family: f.get('family'), address: f.get('address') || '', start: f.get('start') || TODAY,
     handover: f.get('end') || '', budget: Number(f.get('budget')) || 0, team, members, template: !!f.get('tpl'),
   });
+  data.project.type = f.get('ptype') || '';
+  data.project.contract = Number(f.get('amount')) || 0;
   const pid = await Live.createProject(data);
   await Live.open(pid);
   const img = f.get('img');
@@ -615,6 +626,7 @@ async function createLiveProject(f) {
   Store.save();
   await Live.flush();
   toast(sent ? `הפרויקט נוצר ונשלחו ${sent} הזמנות במייל` : 'הפרויקט נוצר');
+  return pid;
 }
 
 /* ---------- הרשאות ---------- */

@@ -4,7 +4,7 @@
 // The demo is frozen on 15.10.2026. The real system uses today's date.
 const TODAY = (() => {
   let demo = true;
-  try { demo = !(window.CASA_CONFIG && CASA_CONFIG.url) || localStorage.getItem('casa-mode') === 'demo'; } catch (e) { /* ignore */ }
+  demo = window.CASA_MODE !== 'live' || !(window.CASA_CONFIG && CASA_CONFIG.url);
   if (demo) return '2026-10-15';
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;

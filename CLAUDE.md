@@ -6,13 +6,13 @@
   - `git push origin main main:gh-pages`: הריפו הציבורי `casa-pueblo`, שממנו מוגש האתר (הענף `gh-pages`).
   - `git push private main`: הריפו הפרטי `itzik-max/casa-portal`, העותק המלא לעבודה מכל מחשב.
   - במחשב חדש: `git clone https://github.com/itzik-max/casa-portal.git`, ואז מוסיפים את הריפו הציבורי: `git remote add site https://github.com/itzik-max/casa-pueblo.git`. משם הדחיפה לאתר היא `git push site main main:gh-pages`.
-- **גרסה בכתובות:** ב־`index.html` לכל קובץ CSS ו־JS יש `?v=YYYYMMDD`. כשמשנים CSS או JS, מעדכנים את המספר בכל השורות, כדי שטלפונים ודפדפנים שכבר פתחו את האתר יטענו את החדש.
+- **גרסה בכתובות:** ב־`index.html` וב־`app.html` (שניהם!) לכל קובץ CSS ו־JS יש `?v=YYYYMMDD`. כשמשנים CSS או JS, מעדכנים את המספר בכל השורות, כדי שטלפונים ודפדפנים שכבר פתחו את האתר יטענו את החדש.
 - **נתוני ההדגמה נשמרים בדפדפן** תחת `STORE_KEY` ב־`js/ui.js`. שינוי ב־`seedData` מגיע למי שכבר נכנס רק אם מעלים את המספר (v8 ← v9). זה מאפס את ההדגמה אצלו.
 - **האתר ציבורי ומשותף עם ג'ורג' מקאסה פואבלו.** כל קובץ בריפו נגיש באתר, אז לא מכניסים סודות.
 
 ## מה זה
 - **אנשי קשר:** חורחה עברין (מנכ"ל, casapueblo.ji@gmail.com) ויניב (casapueblo.yi@gmail.com). בעברית כותבים **חורחה**, לא ג'ורג'.
-- פורטל לקוחות לקאסה פואבלו, כרגע אב־טיפוס להדגמה (נתוני דמה: "בית אברהמי").
+- פורטל לקוחות לקאסה פואבלו. שתי כתובות: אב־הטיפוס להדגמה (`index.html`, נתוני דמה "בית אברהמי") והמערכת האמיתית (`app.html`, הכתובת `/casa-pueblo/app/`). הפירוט ב־`README.md`.
 - האתר: https://itzik-max.github.io/casa-pueblo/ · הריפו: github.com/itzik-max/casa-pueblo
 - HTML ו־JS פשוטים, בלי build. נפתח גם ישירות מהקובץ.
 
