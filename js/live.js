@@ -16,6 +16,10 @@ const Live = {
     return window.CASA_MODE === 'live' && !!(window.CASA_CONFIG && CASA_CONFIG.url && CASA_CONFIG.key && window.supabase);
   },
 
+  // True when this page load came from an email link (magic link / invite). Read before the client clears the URL.
+  cameFromLink: /[#&](access_token|error_description)=/.test(location.hash),
+  linkError: /[#&]error_description=/.test(location.hash),
+
   async init() {
     this.sb = supabase.createClient(CASA_CONFIG.url, CASA_CONFIG.key, { auth: { persistSession: true, detectSessionInUrl: true } });
     const { data } = await this.sb.auth.getSession();
@@ -49,6 +53,17 @@ const Live = {
 
   async sendLink(email) {
     const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+    if (error) throw error;
+  },
+
+  async signInPassword(email, password) {
+    const { error } = await this.sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  },
+
+  // Sets (or changes) the signed-in user's password, so next time they can sign in without an email link.
+  async setPassword(password) {
+    const { error } = await this.sb.auth.updateUser({ password });
     if (error) throw error;
   },
 

@@ -1,6 +1,7 @@
 /* Back office for Casa Pueblo staff. */
 
-function formModal({ title, intro = '', fields, submit = 'שמירה', onSave }) {
+// validate(vals) may return an error message: it is shown in the form, and the form stays open.
+function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, validate }) {
   const fieldHtml = (f) => {
     const v = f.value == null ? '' : f.value;
     if (f.type === 'select') return `<label class="field"><span>${esc(f.label)}</span><select class="input" name="${f.id}">${f.options.map((o) => { const [val, lab] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(lab)}</option>`; }).join('')}</select></label>`;
@@ -16,7 +17,10 @@ function formModal({ title, intro = '', fields, submit = 'שמירה', onSave })
     body: `${intro ? `<p class="ink-2" style="margin-top:0">${intro}</p>` : ''}<form id="fm" class="form-grid">${fields.map(fieldHtml).join('')}</form><p class="form-hint" id="fm-err" style="color:var(--st-red)"></p>`,
     foot: `<button class="btn btn-primary" id="fm-save">${icon('check')}${esc(submit)}</button><button class="btn btn-ghost" data-close>ביטול</button>`,
     onOpen(el) {
-      el.querySelector('#fm-save').onclick = async () => {
+      const saveBtn = el.querySelector('#fm-save');
+      saveBtn.onclick = async () => {
+        // One save at a time: a second tap while uploading used to publish the same update twice.
+        if (saveBtn.disabled) return;
         const vals = {};
         fields.forEach((f) => {
           if (f.type === 'checks') { vals[f.id] = [...el.querySelectorAll(`[name="${f.id}"]:checked`)].map((x) => x.value); return; }
@@ -25,7 +29,13 @@ function formModal({ title, intro = '', fields, submit = 'שמירה', onSave })
         });
         const missing = fields.find((f) => f.required && !vals[f.id]);
         if (missing) { el.querySelector('#fm-err').textContent = `צריך למלא: ${missing.label}`; return; }
-        const msg = await onSave(vals);
+        const invalid = validate && validate(vals);
+        if (invalid) { el.querySelector('#fm-err').textContent = invalid; return; }
+        const label = saveBtn.innerHTML;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'שומר…';
+        let msg;
+        try { msg = await onSave(vals); } finally { saveBtn.disabled = false; saveBtn.innerHTML = label; }
         closeModal();
         if (msg) toast(msg);
         App.render();
@@ -155,6 +165,7 @@ Pages['bo-home'] = (q) => {
 };
 
 /* ---------- ניהול פרויקט ---------- */
+const MAX_PHOTOS = 30; // per photo update
 const PROJECT_ACTIONS = [
   ['weekly', 'send', 'הסיכום השבועי'],
   ['stage', 'timeline', 'עדכון שלב והתקדמות'],
@@ -360,11 +371,20 @@ const ACTIONS = {
         { id: 'files', label: 'תמונות (מהנייד או מהמחשב)', type: 'file', multiple: true, accept: 'image/*' },
       ],
       submit: 'פרסום',
+      validate(v) {
+        if (!Store.live) return '';
+        const files = [...v.files];
+        if (!files.length) return 'צריך לבחור לפחות תמונה אחת';
+        if (files.length > MAX_PHOTOS) return `אפשר עד ${MAX_PHOTOS} תמונות בעדכון אחד, ונבחרו ${files.length}. מפצלים לשני עדכונים.`;
+        const heic = files.filter((f) => /^image\/hei[cf]$/i.test(f.type) || /\.hei[cf]$/i.test(f.name));
+        if (heic.length) return `${heic.length} מהתמונות בפורמט HEIC (מאייפון), והדפדפן לא יציג אותן. מעלים אותן ישר מהנייד, שממיר ל־JPG לבד, או ממירים ל־JPG לפני ההעלאה.`;
+        return '';
+      },
       async onSave(v) { return withUpload(async () => {
         let photos = [];
         if (Store.live) {
           if (!v.files.length) return 'צריך לבחור לפחות תמונה אחת';
-          for (const f of [...v.files].slice(0, 30)) photos.push(await storeFile(await shrinkImage(f)));
+          for (const f of [...v.files].slice(0, MAX_PHOTOS)) photos.push(await storeFile(await shrinkImage(f)));
         } else {
           for (const f of [...v.files].slice(0, 6)) { const src = await readImage(f); if (src) photos.push(src); }
           if (!photos.length) photos = ['assets/img/j-28.jpg', 'assets/img/j-31.jpg'];

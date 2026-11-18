@@ -5,7 +5,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
 const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-const SITE = Deno.env.get('SITE_URL') || 'https://itzik-max.github.io/casa-pueblo/';
+const SITE = Deno.env.get('SITE_URL') || 'https://casapuebloji-design.github.io/casa-pueblo/';
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 

@@ -124,10 +124,13 @@ function liveLoginView() {
         <h1>הבית שלי</h1>
         <p class="lede">כניסה לאזור האישי של הפרויקט שלכם</p>
         <div id="lg-step">
-          <label class="field"><span>אימייל</span><input class="input" id="lg-user" type="email" autocomplete="email" placeholder="name@example.com" dir="ltr" required></label>
-          <button class="btn btn-primary btn-block" type="submit">שליחת קישור כניסה</button>
-          <p class="form-hint">נשלח אליכם למייל קישור. לוחצים עליו ונכנסים, בלי סיסמה.</p>
+          <label class="field"><span>אימייל</span><input class="input" id="lg-user" type="email" autocomplete="username" placeholder="name@example.com" dir="ltr" required></label>
+          <label class="field"><span>סיסמה</span><input class="input" id="lg-pass" type="password" autocomplete="current-password" dir="ltr"></label>
+          <button class="btn btn-primary btn-block" type="submit">כניסה</button>
           <p class="form-hint" id="lg-err" style="color:var(--st-red);margin-top:10px"></p>
+          <p class="form-hint" style="margin-top:14px">פעם ראשונה כאן, או ששכחתם את הסיסמה?
+            <button type="button" class="link-btn" id="lg-link">שליחת קישור כניסה למייל</button><br>
+            אחרי הכניסה מהקישור בוחרים סיסמה, ומאז נכנסים איתה.</p>
         </div>
         <div class="demo-entries"><button type="button" class="link-btn small" id="lg-demo">צפייה באב־טיפוס להדגמה</button></div>
       </form>
@@ -137,22 +140,81 @@ function liveLoginView() {
 
 function mountLiveLogin(app) {
   const form = app.querySelector('#login');
+  const err = app.querySelector('#lg-err');
+  const readEmail = () => {
+    const email = app.querySelector('#lg-user').value.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = 'צריך להזין כתובת מייל תקינה'; return ''; }
+    return email;
+  };
+  // Email + password: the everyday way in. Works the same in the browser and in the home-screen app.
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const email = app.querySelector('#lg-user').value.trim().toLowerCase();
-    const err = app.querySelector('#lg-err');
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = 'צריך להזין כתובת מייל תקינה'; return; }
+    err.textContent = '';
+    const email = readEmail();
+    if (!email) return;
+    const pass = app.querySelector('#lg-pass').value;
+    if (!pass) { err.textContent = 'צריך להזין סיסמה. אין עדיין סיסמה? שולחים קישור כניסה למייל (למטה).'; return; }
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     try {
-      await Live.sendLink(email);
-      app.querySelector('#lg-step').innerHTML = `<div class="card card-pad" style="background:rgba(255,255,255,.04)"><b>שלחנו קישור ל־<span dir="ltr">${esc(email)}</span></b><p class="ink-2" style="margin:6px 0 0">פותחים את המייל ולוחצים על הקישור. אם הוא לא הגיע תוך דקה, כדאי לבדוק בתיקיית הספאם.</p></div>`;
+      await Live.signInPassword(email, pass);
+      location.reload();
     } catch (ex) {
       btn.disabled = false;
-      err.textContent = /rate|seconds/i.test(ex.message) ? 'נשלחו כבר כמה קישורים. כדאי לחכות דקה ולנסות שוב.' : 'לא הצלחנו לשלוח את הקישור: ' + ex.message;
+      err.textContent = /invalid login credentials/i.test(ex.message)
+        ? 'המייל או הסיסמה לא נכונים. אם עוד לא בחרתם סיסמה, או ששכחתם אותה, שולחים קישור כניסה למייל (למטה).'
+        : 'הכניסה לא הצליחה: ' + ex.message;
+    }
+  };
+  // Email link: first time in, or a forgotten password. After it the app asks to choose a password.
+  app.querySelector('#lg-link').onclick = async (e) => {
+    err.textContent = '';
+    const email = readEmail();
+    if (!email) return;
+    e.target.disabled = true;
+    try {
+      await Live.sendLink(email);
+      app.querySelector('#lg-step').innerHTML = `<div class="card card-pad" style="background:rgba(255,255,255,.04)"><b>שלחנו קישור ל־<span dir="ltr">${esc(email)}</span></b>
+        <p class="ink-2" style="margin:6px 0 0">פותחים את המייל ולוחצים על הקישור <b>פעם אחת</b>, בלחיצה רגילה. הקישור עובד פעם אחת בלבד.</p>
+        <p class="ink-2" style="margin:6px 0 0">אם הוא לא הגיע תוך דקה, כדאי לבדוק בתיקיית הספאם.</p></div>`;
+    } catch (ex) {
+      e.target.disabled = false;
+      err.textContent = /rate|seconds/i.test(ex.message) ? 'אפשר לשלוח רק כמה קישורים בשעה. נסו שוב בעוד שעה, או היכנסו עם סיסמה.' : 'לא הצלחנו לשלוח את הקישור: ' + ex.message;
     }
   };
   app.querySelector('#lg-demo').onclick = () => { location.href = 'index.html'; };
+}
+
+// Choose / change password. Shown after signing in from an email link, and from the key button in the header.
+function passwordModal({ fromLink = false } = {}) {
+  openModal({
+    title: fromLink ? 'בחירת סיסמה' : 'שינוי סיסמה',
+    body: `${fromLink ? '<p class="ink-2" style="margin-top:0">נכנסתם עם קישור מהמייל. בחרו סיסמה, ומעכשיו תיכנסו עם המייל והסיסמה, גם מהאייקון במסך הבית.</p>' : ''}
+      <form id="pw" class="form-grid" novalidate>
+        <label class="field"><span>סיסמה חדשה (לפחות 8 תווים)</span><input class="input" id="pw1" type="password" autocomplete="new-password" dir="ltr"></label>
+        <label class="field"><span>שוב, לאימות</span><input class="input" id="pw2" type="password" autocomplete="new-password" dir="ltr"></label>
+      </form><p class="form-hint" id="pw-err" style="color:var(--st-red)"></p>`,
+    foot: `<button class="btn btn-primary" id="pw-save">${icon('check')}שמירת הסיסמה</button><button class="btn btn-ghost" data-close>${fromLink ? 'אחר כך' : 'ביטול'}</button>`,
+    onOpen(el) {
+      const btn = el.querySelector('#pw-save');
+      const errEl = el.querySelector('#pw-err');
+      btn.onclick = async () => {
+        const a = el.querySelector('#pw1').value;
+        const b = el.querySelector('#pw2').value;
+        if (a.length < 8) { errEl.textContent = 'הסיסמה צריכה להיות באורך 8 תווים לפחות'; return; }
+        if (a !== b) { errEl.textContent = 'שתי הסיסמאות לא זהות'; return; }
+        btn.disabled = true;
+        try {
+          await Live.setPassword(a);
+          closeModal();
+          toast('הסיסמה נשמרה. מעכשיו נכנסים עם המייל והסיסמה.');
+        } catch (ex) {
+          btn.disabled = false;
+          errEl.textContent = /different from the old/i.test(ex.message) ? 'זו כבר הסיסמה שלכם. אפשר לסגור.' : 'לא הצלחנו לשמור: ' + ex.message;
+        }
+      };
+    },
+  });
 }
 
 function noProjectView() {
@@ -248,6 +310,7 @@ function clientMasthead(page, unread, tasks, staffSession) {
       <button class="icon-btn" id="nav-mode" aria-label="תפריט צד במקום טאבים" title="תפריט צד במקום טאבים">${icon('sidebar')}</button>
       ${staffSession ? `<button class="icon-btn" id="switch-view" aria-label="חזרה ל-Back Office" title="חזרה ל-Back Office">${icon('grid')}</button>` : ''}
       <div class="who"><span class="avatar">${initials(currentUserName())}</span><span>${esc(currentUserName())}</span></div>
+      ${Store.live ? `<button class="icon-btn" id="set-pass" aria-label="סיסמה" title="בחירת סיסמה">${icon('key')}</button>` : ''}
       <button class="icon-btn" id="logout" aria-label="יציאה">${icon('logout')}</button>
     </div>
     <div class="navtabs-wrap">
@@ -325,6 +388,7 @@ function shellView(page, view, staff) {
         <button class="icon-btn" id="open-search" aria-label="חיפוש">${icon('search')}</button>
         ${staff ? '' : `<a class="icon-btn" href="#/notifications" aria-label="התראות${unread ? `, ${unread} חדשות` : ''}">${icon('bell')}${unread ? `<span class="badge-dot">${unread}</span>` : ''}</a>`}
         <div class="who"><span class="avatar ${staff ? 'navy' : ''}">${initials(who)}</span><span>${esc(who)}</span></div>
+        ${Store.live ? `<button class="icon-btn" id="set-pass" aria-label="סיסמה" title="בחירת סיסמה">${icon('key')}</button>` : ''}
         <button class="icon-btn" id="logout" aria-label="יציאה">${icon('logout')}</button>
       </header>
       <main class="main" id="main">${view.html}${staff ? '' : pager(page)}</main>
@@ -353,6 +417,8 @@ function resetLink() {
 
 function bindShell(app) {
   app.querySelector('#logout').onclick = logout;
+  const sp = app.querySelector('#set-pass');
+  if (sp) sp.onclick = () => passwordModal();
   app.querySelector('#open-search').onclick = openSearch;
   const nm = app.querySelector('#nav-mode');
   if (nm) nm.onclick = () => {
@@ -444,7 +510,14 @@ async function bootLive() {
   document.getElementById('app').innerHTML = '<div class="login-panel" style="min-height:100vh"><p class="ink-2">טוען…</p></div>';
   let ok = false;
   try { ok = await Live.init(); } catch (e) { toast('אין חיבור למערכת: ' + e.message); }
-  if (!ok) { Store.session = null; App.render(); return; }
+  if (!ok) {
+    Store.session = null;
+    App.render();
+    // An email link that was already used (or expired) lands here with an error in the URL.
+    const err = document.getElementById('lg-err');
+    if (Live.linkError && err) err.textContent = 'הקישור מהמייל כבר שומש או שפג תוקפו (כל קישור עובד פעם אחת). אם יש לכם סיסמה, היכנסו איתה. אם לא, שלחו קישור חדש.';
+    return;
+  }
   const staff = Live.user.staff || Live.anyDesigner();
   const prev = Store.session || {};
   Store.session = { role: staff ? 'staff' : 'client', view: staff ? (prev.view || 'staff') : 'client', nav: prev.nav || 'tabs', pid: prev.pid };
@@ -452,6 +525,7 @@ async function bootLive() {
   if (!Store.data && staff) { Store.data = emptyProjectData({}); Store.data.portfolio = []; Store.data.empty = true; }
   try { localStorage.setItem(LIVE_SESSION_KEY, JSON.stringify(Store.session)); } catch (e) { /* ignore */ }
   App.render();
+  if (Live.cameFromLink && !Live.linkError) passwordModal({ fromLink: true });
 }
 window.addEventListener('beforeunload', (e) => { if (Store.live && (Live.dirty || Live.saving)) { Live.flush(); e.preventDefault(); e.returnValue = ''; } });
 if (window.CASA_MODE === 'live' && !Live.enabled()) {

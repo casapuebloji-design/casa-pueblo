@@ -5,7 +5,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
 const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-const SITE = Deno.env.get('SITE_URL') || 'https://itzik-max.github.io/casa-pueblo/';
+const SITE = Deno.env.get('SITE_URL') || 'https://casapuebloji-design.github.io/casa-pueblo/';
 const esc = (s: string) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmt = (iso: string) => iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.' + iso.slice(0, 4);
 
