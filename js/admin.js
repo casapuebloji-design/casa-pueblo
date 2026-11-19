@@ -372,6 +372,7 @@ const ACTIONS = {
       ],
       submit: 'פרסום',
       validate(v) {
+        if (!v.stages.length) return 'צריך לסמן לפחות שלב בנייה אחד, כדי שהתמונות יופיעו בקטגוריה הנכונה.';
         if (!Store.live) return '';
         const files = [...v.files];
         if (!files.length) return 'צריך לבחור לפחות תמונה אחת';
