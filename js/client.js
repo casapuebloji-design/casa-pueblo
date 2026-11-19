@@ -885,11 +885,11 @@ Pages.photos = (q) => {
       ${view === 'all' ? `<div class="chips" role="group" aria-label="סינון לפי שלב">
         ${['הכול', ...used].map((s) => `<button class="chip" aria-pressed="${s === stage}" data-stage="${esc(s)}">${esc(s === 'הכול' ? 'הכל' : s)}</button>`).join('')}
       </div>${journal()}` : byStage()}
-      <section style="margin-top:64px">
+      ${Store.live ? '' : `<section style="margin-top:64px">
         <div class="page-head" style="margin-bottom:16px"><div><span class="eyebrow">Before &amp; After</span><h1 style="font-size:34px">מה היה, ומה יהיה</h1><p>גררו את הקו כדי להשוות. מתוך פרויקט של קאסה פואבלו ברמת השרון.</p></div></div>
         <div class="ba-tabs">${BEFORE_AFTER.map((p, i) => `<button class="chip" aria-pressed="${i === pairIdx}" data-ba="${i}">${esc(p.name)}</button>`).join('')}</div>
         ${baSlider(pair.before, pair.after)}
-      </section>`,
+      </section>`}`,
     mount(root) {
       root.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => App.go('photos', { view: b.dataset.view })));
       root.querySelector('#ph-up').onclick = () => ACTIONS.photos();
