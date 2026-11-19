@@ -158,6 +158,8 @@ function mountLiveLogin(app) {
     btn.disabled = true;
     try {
       await Live.signInPassword(email, pass);
+      // Drop any leftover email-link error from the URL first: on reload it would make the client sign out again.
+      history.replaceState(null, '', location.pathname + location.search);
       location.reload();
     } catch (ex) {
       btn.disabled = false;

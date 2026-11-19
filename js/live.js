@@ -23,6 +23,8 @@ const Live = {
   async init() {
     this.sb = supabase.createClient(CASA_CONFIG.url, CASA_CONFIG.key, { auth: { persistSession: true, detectSessionInUrl: true } });
     const { data } = await this.sb.auth.getSession();
+    // A used/expired email link leaves an error in the URL; remove it so a later reload does not sign out again.
+    if (this.linkError) history.replaceState(null, '', location.pathname + location.search);
     if (!data.session) return false;
     const u = data.session.user;
     const { data: prof } = await this.sb.from('profiles').select('is_staff, is_admin, full_name').eq('id', u.id).maybeSingle();
