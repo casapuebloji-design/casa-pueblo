@@ -826,7 +826,7 @@ function luxImg(src, i, cap = '', sub = '') {
 }
 
 // Construction stages a photo can belong to. One update can sit in several (e.g. plumbing, electricity and A/C).
-const PHOTO_STAGES = ['לפני', 'הריסה', 'בנייה', 'אינסטלציה', 'חשמל', 'מיזוג אוויר', 'הנמכות תקרה', 'טיח וצבע', 'ריצוף וחיפויים', 'נגרות', 'אלומיניום', 'מטבח', 'התקנות', 'מסירה'];
+const PHOTO_STAGES = ['לפני', 'הריסה', 'בנייה', 'אינסטלציה', 'חשמל', 'מיזוג אוויר', 'הנמכות תקרה', 'טיח וצבע', 'איטום', 'ריצוף וחיפויים', 'נגרות', 'אלומיניום', 'מטבח', 'התקנות', 'מסירה', 'שונות'];
 function stagesOf(u) { return u.stages && u.stages.length ? u.stages : [u.stage]; }
 
 Pages.photos = (q) => {
