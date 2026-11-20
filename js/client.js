@@ -849,6 +849,7 @@ Pages.photos = (q) => {
         <div>
           <h3>${esc(u.title)}</h3>
           <p>${esc(u.desc)}</p>
+          ${App.isStaffView() ? `<button class="link-btn small" data-addph="${esc(u.id)}" style="margin-bottom:10px">${icon('plus')}הוספת תמונות לעדכון הזה</button>` : ''}
           <div class="mosaic" data-n="${Math.min(u.photos.length, 5)}">${u.photos.map((src) => tile(u, src)).join('')}</div>
         </div>
       </article>`;
@@ -893,6 +894,7 @@ Pages.photos = (q) => {
     mount(root) {
       root.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => App.go('photos', { view: b.dataset.view })));
       root.querySelector('#ph-up').onclick = () => ACTIONS.photos();
+      root.querySelectorAll('[data-addph]').forEach((b) => (b.onclick = () => ACTIONS.photos(b.dataset.addph)));
       root.querySelectorAll('[data-stage]').forEach((b) => (b.onclick = () => App.go('photos', { stage: b.dataset.stage })));
       root.querySelectorAll('[data-ba]').forEach((b) => (b.onclick = () => App.go('photos', { view: q.view, stage: q.stage, ba: b.dataset.ba }, true)));
       root.querySelectorAll('[data-lb]').forEach((b) => (b.onclick = () => openLightbox(all, Number(b.dataset.lb))));

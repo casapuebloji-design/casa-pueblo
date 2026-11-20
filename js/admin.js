@@ -187,6 +187,65 @@ const PROJECT_ACTIONS = [
 // Back Office actions only Jorge sees (permissions questionnaire).
 const JORGE_ACTIONS = ['details', 'payment', 'change', 'member'];
 
+// Photo upload form. target = null starts a new update; an existing update gets the new photos added to it
+// (e.g. one "demolition, week of ..." entry that grows during the week).
+function photoForm(target) {
+  const fields = target
+    ? [
+        { id: 'stages', label: 'שלבי בנייה (אפשר להוסיף)', type: 'checks', options: PHOTO_STAGES, value: stagesOf(target) },
+        { id: 'files', label: 'תמונות להוספה (מהנייד או מהמחשב)', type: 'file', multiple: true, accept: 'image/*' },
+      ]
+    : [
+        { id: 'title', label: 'כותרת', required: true },
+        { id: 'stages', label: 'שלבי בנייה (אפשר כמה)', type: 'checks', options: PHOTO_STAGES, value: [] },
+        { id: 'desc', label: 'תיאור קצר', type: 'textarea' },
+        { id: 'files', label: 'תמונות (מהנייד או מהמחשב)', type: 'file', multiple: true, accept: 'image/*' },
+      ];
+  formModal({
+    title: target ? 'הוספת תמונות לעדכון' : 'עדכון תמונות ליומן',
+    intro: target ? `<b>${esc(target.title)}</b> · ${fmtDate(target.date)} · יש בו כבר ${target.photos.length} תמונות` : '',
+    fields,
+    submit: target ? 'הוספה' : 'פרסום',
+    validate(v) {
+      if (!v.stages.length) return 'צריך לסמן לפחות שלב בנייה אחד, כדי שהתמונות יופיעו בקטגוריה הנכונה.';
+      if (!Store.live) return '';
+      const files = [...v.files];
+      if (!files.length) return 'צריך לבחור לפחות תמונה אחת';
+      if (files.length > MAX_PHOTOS) return `אפשר עד ${MAX_PHOTOS} תמונות בכל העלאה, ונבחרו ${files.length}. מעלים בשתי פעמים.`;
+      const heic = files.filter((f) => /^image\/hei[cf]$/i.test(f.type) || /\.hei[cf]$/i.test(f.name));
+      if (heic.length) return `${heic.length} מהתמונות בפורמט HEIC (מאייפון), והדפדפן לא יציג אותן. מעלים אותן ישר מהנייד, שממיר ל־JPG לבד, או ממירים ל־JPG לפני ההעלאה.`;
+      return '';
+    },
+    async onSave(v) { return withUpload(async () => {
+      let photos = [];
+      if (Store.live) {
+        if (!v.files.length) return 'צריך לבחור לפחות תמונה אחת';
+        for (const f of [...v.files].slice(0, MAX_PHOTOS)) photos.push(await storeFile(await shrinkImage(f)));
+      } else {
+        for (const f of [...v.files].slice(0, 6)) { const src = await readImage(f); if (src) photos.push(src); }
+        if (!photos.length) photos = ['assets/img/j-28.jpg', 'assets/img/j-31.jpg'];
+      }
+      // Look the update up again: the project may have been reloaded while the photos uploaded.
+      const u = target && Store.data.updates.find((x) => x.id === target.id);
+      if (target && !u) return 'העדכון לא נמצא (אולי נמחק בינתיים). התמונות לא נוספו.';
+      if (u) {
+        u.photos.push(...photos);
+        u.stages = v.stages;
+        u.stage = v.stages[0];
+        u.edited = TODAY;
+        Store.log(`הוסיף ${photos.length} תמונות לעדכון: ${u.title}`, TEAM.pm.name);
+        Store.notify(`נוספו ${photos.length} תמונות לעדכון "${u.title}"`, 'photos');
+      } else {
+        Store.data.updates.unshift({ id: 'u' + Date.now(), date: TODAY, title: v.title, stage: v.stages[0], stages: v.stages, desc: v.desc, photos });
+        Store.log(`העלה ${photos.length} תמונות: ${v.title}`, TEAM.pm.name);
+        Store.notify(`נוספו ${photos.length} תמונות חדשות מהפרויקט`, 'photos');
+      }
+      Store.save();
+      return u ? `${photos.length} התמונות נוספו לעדכון "${u.title}"` : 'התמונות פורסמו ביומן הפרויקט';
+    }); },
+  });
+}
+
 const ACTIONS = {
   weekly() { App.go('bo-weekly'); },
   weeklyText() {
@@ -361,41 +420,21 @@ const ACTIONS = {
     });
   },
   material() { materialForm(); },
-  photos() {
-    formModal({
-      title: 'עדכון תמונות ליומן',
-      fields: [
-        { id: 'title', label: 'כותרת', required: true },
-        { id: 'stages', label: 'שלבי בנייה (אפשר כמה)', type: 'checks', options: PHOTO_STAGES, value: [] },
-        { id: 'desc', label: 'תיאור קצר', type: 'textarea' },
-        { id: 'files', label: 'תמונות (מהנייד או מהמחשב)', type: 'file', multiple: true, accept: 'image/*' },
-      ],
-      submit: 'פרסום',
-      validate(v) {
-        if (!v.stages.length) return 'צריך לסמן לפחות שלב בנייה אחד, כדי שהתמונות יופיעו בקטגוריה הנכונה.';
-        if (!Store.live) return '';
-        const files = [...v.files];
-        if (!files.length) return 'צריך לבחור לפחות תמונה אחת';
-        if (files.length > MAX_PHOTOS) return `אפשר עד ${MAX_PHOTOS} תמונות בעדכון אחד, ונבחרו ${files.length}. מפצלים לשני עדכונים.`;
-        const heic = files.filter((f) => /^image\/hei[cf]$/i.test(f.type) || /\.hei[cf]$/i.test(f.name));
-        if (heic.length) return `${heic.length} מהתמונות בפורמט HEIC (מאייפון), והדפדפן לא יציג אותן. מעלים אותן ישר מהנייד, שממיר ל־JPG לבד, או ממירים ל־JPG לפני ההעלאה.`;
-        return '';
+  // With an update id: add photos to that update. Without: ask whether to start a new update or add to an existing one.
+  photos(targetId) {
+    const ups = Store.data.updates || [];
+    const target = targetId && ups.find((u) => u.id === targetId);
+    if (target || !ups.length) return photoForm(target || null);
+    openModal({
+      title: 'העלאת תמונות',
+      body: `<button class="btn btn-primary" id="ph-new" style="width:100%;justify-content:center">${icon('plus')}עדכון חדש (כותרת חדשה)</button>
+        <p class="small ink-2" style="margin:18px 0 8px"><b>או הוספה לעדכון שכבר פורסם:</b></p>
+        <div style="display:grid;gap:8px">${ups.slice(0, 12).map((u) => `<button class="btn btn-ghost" data-up="${esc(u.id)}" style="width:100%;justify-content:space-between;text-align:right;white-space:normal;height:auto;padding:10px 14px">
+          <span><b>${esc(u.title)}</b><br><span class="small muted">${fmtDate(u.date)} · ${esc(stagesOf(u).join(', '))}</span></span><span class="small muted">${u.photos.length} תמונות</span></button>`).join('')}</div>`,
+      onOpen(el) {
+        el.querySelector('#ph-new').onclick = () => { closeModal(); photoForm(null); };
+        el.querySelectorAll('[data-up]').forEach((b) => (b.onclick = () => { closeModal(); photoForm(ups.find((u) => u.id === b.dataset.up)); }));
       },
-      async onSave(v) { return withUpload(async () => {
-        let photos = [];
-        if (Store.live) {
-          if (!v.files.length) return 'צריך לבחור לפחות תמונה אחת';
-          for (const f of [...v.files].slice(0, MAX_PHOTOS)) photos.push(await storeFile(await shrinkImage(f)));
-        } else {
-          for (const f of [...v.files].slice(0, 6)) { const src = await readImage(f); if (src) photos.push(src); }
-          if (!photos.length) photos = ['assets/img/j-28.jpg', 'assets/img/j-31.jpg'];
-        }
-        Store.data.updates.unshift({ id: 'u' + Date.now(), date: TODAY, title: v.title, stage: v.stages[0] || Store.data.project.stage, stages: v.stages.length ? v.stages : [Store.data.project.stage], desc: v.desc, photos });
-        Store.log(`העלה ${photos.length} תמונות: ${v.title}`, TEAM.pm.name);
-        Store.notify(`נוספו ${photos.length} תמונות חדשות מהפרויקט`, 'photos');
-        Store.save();
-        return 'התמונות פורסמו ביומן הפרויקט';
-      }); },
     });
   },
   doc() { uploadDocFlow(); },
