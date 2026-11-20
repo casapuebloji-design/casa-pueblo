@@ -89,13 +89,34 @@ function parseDate(s) { const [y, m, d] = s.slice(0, 10).split('-').map(Number);
 function fmtDate(s) {
   if (!s) return '—';
   const d = parseDate(s);
-  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 function fmtDateShort(s) {
   if (!s) return '—';
   const d = parseDate(s);
-  return `${d.getDate()}.${d.getMonth() + 1}`;
+  return `${d.getDate()}/${d.getMonth() + 1}`;
 }
+
+/* Date fields: the browser shows <input type="date"> in its own locale (often MM/DD/YYYY on a computer).
+   We keep the native field (value stays YYYY-MM-DD, the picker still opens) but hide its text and show DD/MM/YYYY on top. */
+function dressDateInput(inp) {
+  if (inp.dataset.dressed) return;
+  inp.dataset.dressed = '1';
+  const wrap = document.createElement('span');
+  wrap.className = 'date-wrap';
+  inp.parentNode.insertBefore(wrap, inp);
+  wrap.appendChild(inp);
+  const show = document.createElement('span');
+  show.className = 'date-show';
+  wrap.appendChild(show);
+  const sync = () => { show.textContent = inp.value ? fmtDate(inp.value) : 'DD/MM/YYYY'; show.classList.toggle('empty', !inp.value); };
+  inp.addEventListener('input', sync);
+  inp.addEventListener('change', sync);
+  inp.addEventListener('click', () => { try { inp.showPicker && inp.showPicker(); } catch (e) { /* not supported */ } });
+  sync();
+}
+new MutationObserver(() => document.querySelectorAll('input[type="date"]:not([data-dressed])').forEach(dressDateInput))
+  .observe(document.documentElement, { childList: true, subtree: true });
 const HEB_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 const HEB_MONTHS_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
 function fmtDateLong(s) { const d = parseDate(s); return `${d.getDate()} ב${HEB_MONTHS[d.getMonth()]} ${d.getFullYear()}`; }

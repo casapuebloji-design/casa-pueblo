@@ -276,7 +276,7 @@ Pages.home = () => {
 Pages.project = () => {
   const d = Store.data;
   const p = d.project;
-  const team = Object.values(TEAM);
+  const team = Object.values(TEAM).filter((t) => t.name);
   return {
     title: 'הפרויקט שלי',
     html: `
@@ -595,7 +595,7 @@ function materialForm(m = null, focus = '') {
   const inp = (id, label, type = 'text', extra = '') => `<label class="field"><span>${label}</span><input class="input" name="${id}" type="${type}" value="${esc(v[id] || '')}" ${extra}></label>`;
   const sel = (id, label, opts) => `<label class="field"><span>${label}</span><select class="input" name="${id}">${opts.map((o) => `<option ${o === v[id] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
   openModal({
-    title: m ? `עריכה: ${m.name}` : 'הוספת חומר / מוצר',
+    title: m ? `עריכה: ${m.name}` : 'הוספת חומר ו/או מוצר',
     wide: true,
     body: `<form id="mf" class="form-grid two">
       ${inp('name', 'שם הפריט')}${sel('space', 'חלל', SPACES)}
@@ -656,7 +656,7 @@ Pages.materials = (q) => {
             <button aria-pressed="${by === 'space'}" data-by="space">לפי חלל</button>
             <button aria-pressed="${by === 'cat'}" data-by="cat">לפי קטגוריה</button>
           </div>
-          <button class="btn btn-accent" id="mt-add">${icon('plus')}הוספת חומר</button>
+          <button class="btn btn-accent" id="mt-add">${icon('plus')}הוספת חומר ו/או מוצר</button>
         </div>
       </div>
       ${groups.map((g) => {
@@ -675,7 +675,7 @@ Pages.materials = (q) => {
               </button>`).join('')}
           </div>
         </section>`;
-      }).join('') || '<div class="empty">עוד אין חומרים. לוחצים "הוספת חומר".</div>'}`,
+      }).join('') || '<div class="empty">עוד אין חומרים. לוחצים "הוספת חומר ו/או מוצר".</div>'}`,
     mount(root) {
       root.querySelectorAll('[data-by]').forEach((b) => (b.onclick = () => App.go('materials', { by: b.dataset.by })));
       root.querySelectorAll('[data-mat]').forEach((b) => (b.onclick = () => openMaterial(b.dataset.mat)));
@@ -826,7 +826,7 @@ function luxImg(src, i, cap = '', sub = '') {
 }
 
 // Construction stages a photo can belong to. One update can sit in several (e.g. plumbing, electricity and A/C).
-const PHOTO_STAGES = ['לפני', 'הריסה', 'בנייה', 'אינסטלציה', 'חשמל', 'מיזוג אוויר', 'הנמכות תקרה', 'טיח וצבע', 'איטום', 'ריצוף וחיפויים', 'נגרות', 'אלומיניום', 'מטבח', 'התקנות', 'מסירה', 'שונות'];
+const PHOTO_STAGES = ['הדמיות', 'לפני', 'הריסה', 'עבודות שלד', 'בנייה', 'גגות', 'אינסטלציה', 'חשמל', 'מיזוג אוויר', 'הנמכות תקרה', 'טיח וצבע', 'איטום', 'ריצוף וחיפויים', 'נגרות', 'אלומיניום', 'מטבח', 'התקנות', 'עבודות פיתוח', 'מסירה', 'שונות'];
 function stagesOf(u) { return u.stages && u.stages.length ? u.stages : [u.stage]; }
 
 Pages.photos = (q) => {

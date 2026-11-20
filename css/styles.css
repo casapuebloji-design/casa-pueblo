@@ -138,6 +138,13 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; line-height: 1.25; }
   transition: border-color .15s, box-shadow .15s;
 }
 textarea.input { min-height: 96px; resize: vertical; }
+/* Date fields show DD/MM/YYYY on top of the native field (see dressDateInput in ui.js). */
+.date-wrap, .field > .date-wrap { position: relative; display: block; margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+.date-wrap input[type="date"] { color: transparent; }
+.date-wrap input[type="date"]::-webkit-datetime-edit { color: transparent; }
+.date-wrap input[type="date"]:focus::-webkit-datetime-edit { color: transparent; }
+.date-show { position: absolute; inset-inline-start: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--ink); direction: ltr; unicode-bidi: isolate; }
+.date-show.empty { color: var(--muted); }
 .input:focus { outline: none; border-color: var(--navy-2); box-shadow: 0 0 0 3px rgba(43, 74, 114, .14); }
 .form-grid { display: grid; grid-template-columns: 1fr; gap: 0 14px; }
 @media (min-width: 640px) { .form-grid.two { grid-template-columns: 1fr 1fr; } }

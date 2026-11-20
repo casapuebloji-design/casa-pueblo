@@ -175,7 +175,7 @@ const PROJECT_ACTIONS = [
   ['version', 'layers', 'העלאת גרסה חדשה'],
   ['approval', 'check', 'בקשת אישור מהלקוח'],
   ['task', 'tasks', 'משימה ללקוח'],
-  ['material', 'materials', 'הוספת חומר'],
+  ['material', 'materials', 'הוספת חומר ו/או מוצר'],
   ['photos', 'camera', 'העלאת תמונות'],
   ['doc', 'documents', 'העלאת מסמך'],
   ['payment', 'finance', 'עדכון תשלום'],
@@ -304,23 +304,67 @@ const ACTIONS = {
       },
     });
   },
+  // Everything the "new project" form asks, editable later. Saving here never sends an invite.
   details() {
-    const p = Store.data.project;
+    const d = Store.data;
+    const p = d.project;
+    const team = d.team || (d.team = JSON.parse(JSON.stringify(TEAM)));
+    const mem = d.members || (d.members = []);
+    const m1 = mem.find((m) => m.role === 'בעל הבית') || mem[0] || {};
+    const m2 = mem.find((m) => m !== m1 && /זוג/.test(m.role || '')) || mem.find((m) => m !== m1) || {};
+    const types = PROJECT_TYPES.includes(p.type) || !p.type ? PROJECT_TYPES : [p.type, ...PROJECT_TYPES];
     formModal({
       title: 'פרטי פרויקט',
+      intro: 'שמירה כאן לא שולחת הזמנה ללקוחות. הזמנה שולחים בנפרד, מ"הזמנת משתמש לפרויקט".',
       fields: [
         { id: 'name', label: 'שם הפרויקט', value: p.name, required: true },
+        { id: 'family', label: 'שם המשפחה', value: p.family, required: true },
         { id: 'address', label: 'כתובת', value: p.address },
+        { id: 'area', label: 'היקף (למשל: דירת 5 חדרים, 140 מ"ר)', value: p.area },
+        { id: 'scope', label: 'תיאור העבודה (מוצג ללקוח ב"הפרויקט שלי")', type: 'textarea', value: p.scope },
+        { id: 'c1', label: 'לקוח ראשי – שם', value: m1.name },
+        { id: 'c1e', label: 'לקוח ראשי – אימייל', type: 'email', value: m1.email },
+        { id: 'c1p', label: 'לקוח ראשי – טלפון', type: 'tel', value: m1.phone },
+        { id: 'c2', label: 'לקוח נוסף – שם', value: m2.name },
+        { id: 'c2e', label: 'לקוח נוסף – אימייל', type: 'email', value: m2.email },
+        { id: 'c2p', label: 'לקוח נוסף – טלפון', type: 'tel', value: m2.phone },
+        ...[['pm', 'מנהל פרויקט'], ['architect', 'אדריכלית / מעצבת'], ['office', 'הנהלת חשבונות']].flatMap(([k, label]) => [
+          { id: `${k}_name`, label: `${label} – שם`, value: team[k] && team[k].name },
+          { id: `${k}_phone`, label: `${label} – טלפון`, type: 'tel', value: team[k] && team[k].phone },
+          { id: `${k}_email`, label: `${label} – אימייל`, type: 'email', value: team[k] && team[k].email },
+        ]),
+        { id: 'type', label: 'סוג הפרויקט', type: 'select', options: types, value: p.type },
+        { id: 'contract', label: 'סכום השיפוץ (₪)', type: 'number', value: p.contract || '' },
+        { id: 'budget', label: 'תקציב כולל של המשפחה (לא חובה)', type: 'number', value: p.budget || '' },
+        { id: 'start', label: 'תאריך התחלה', type: 'date', value: p.start },
         { id: 'handover', label: 'תאריך מסירה משוער', type: 'date', value: p.handover },
         ...(Store.live ? [{ id: 'imgfile', label: 'תמונה ראשית חדשה (לא חובה)', type: 'file', accept: 'image/*' }] : []),
         { id: 'image', label: 'תמונה ראשית', type: 'select', options: [...(String(p.image).startsWith('f:') ? [[p.image, 'התמונה שהועלתה']] : []), ['assets/img/hero-home.jpg', 'בית עם חצר'], ['assets/img/hero-4.jpg', 'סלון'], ['assets/img/hero-1.jpg', 'כניסה'], ['assets/img/hero-5.jpg', 'פינת אוכל'], ['assets/img/j-33.jpg', 'סלון 2']], value: p.image },
       ],
+      validate(v) {
+        const bad = [v.c1e, v.c2e, v.pm_email, v.architect_email, v.office_email].find((e) => e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+        return bad ? `כתובת המייל "${bad}" לא תקינה` : '';
+      },
       onSave(v) {
         return withUpload(async () => {
           const f = v.imgfile && v.imgfile[0];
-          delete v.imgfile;
           if (f) v.image = await storeFile(await shrinkImage(f, 2400));
-          Object.assign(p, v);
+          Object.assign(p, {
+            name: v.name, family: v.family, client: `משפחת ${v.family}`, address: v.address, area: v.area, scope: v.scope, type: v.type,
+            contract: v.contract || 0, budget: v.budget || 0, start: v.start || p.start, handover: v.handover, image: v.image,
+          });
+          // The two main clients: update their entries in place (status and any invite stay as they were).
+          [[m1, 'בעל הבית', v.c1, v.c1e, v.c1p], [m2, 'בן/בת זוג', v.c2, v.c2e, v.c2p]].forEach(([m, role, name, email, phone]) => {
+            if (!name && !email && !phone) return;
+            const row = mem.includes(m) ? m : (mem.push({ role, status: 'טרם הוזמן' }), mem[mem.length - 1]);
+            Object.assign(row, { name, email: (email || '').toLowerCase(), phone });
+          });
+          // The team card the family sees (name, phone, email). TEAM is the in-memory copy the pages read.
+          ['pm', 'architect', 'office'].forEach((k) => {
+            const t = { ...(team[k] || TEAM[k] || {}), name: v[`${k}_name`], phone: v[`${k}_phone`], email: v[`${k}_email`].toLowerCase() };
+            team[k] = t;
+            if (TEAM[k]) Object.assign(TEAM[k], t);
+          });
           Store.log('עדכן את פרטי הפרויקט', TEAM.pm.name);
           Store.save();
           return 'פרטי הפרויקט נשמרו';
@@ -511,7 +555,10 @@ const ACTIONS = {
           if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email)) return 'בלי מייל תקין אי אפשר לשלוח הזמנה';
           await Live.invite(Store.data.project.id, v.email.toLowerCase(), v.role);
         }
-        Store.data.members.push({ ...v, status: 'הוזמן' });
+        // Someone already listed (e.g. entered in the project details) gets updated, not added twice.
+        const known = Store.data.members.find((m) => (v.email && (m.email || '').toLowerCase() === v.email.toLowerCase()) || (!m.email && m.name === v.name));
+        if (known) Object.assign(known, { ...v, email: (v.email || '').toLowerCase(), phone: v.phone || known.phone, status: 'הוזמן' });
+        else Store.data.members.push({ ...v, status: 'הוזמן' });
         Store.log(`הזמין את ${v.name} (${v.role}) לפרויקט`, TEAM.pm.name);
         Store.save();
         return `ההזמנה נשלחה ל${v.name}`;
