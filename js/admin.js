@@ -187,6 +187,89 @@ const PROJECT_ACTIONS = [
 // Back Office actions only Jorge sees (permissions questionnaire).
 const JORGE_ACTIONS = ['details', 'payment', 'change', 'member'];
 
+/* ---------- Payments to Casa Pueblo: the milestone plan from the contract, and recording each payment ---------- */
+function milestones() { return Store.data.casaMilestones || (Store.data.casaMilestones = []); }
+const reopenPayments = () => setTimeout(paymentsModal, 0); // after the form closes, back to the list
+
+function paymentsModal() {
+  const ms = milestones();
+  const total = ms.reduce((s, m) => s + (Number(m.amount) || 0), 0);
+  const paid = ms.filter((m) => m.paid).reduce((s, m) => s + (Number(m.amount) || 0), 0);
+  openModal({
+    title: 'תשלומים לקאסה פואבלו',
+    wide: true,
+    body: ms.length
+      ? `<p class="small ink-2" style="margin-top:0">סה״כ ${ils(total)} · שולם ${ils(paid)} · יתרה ${ils(total - paid)}</p>
+        <ul class="rows">${ms.map((m, i) => `<li class="row compact">
+          <div class="main-col"><div class="title">${esc(m.name)}</div><div class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice ? ` · ${esc(m.invoice)}` : ''}` : `לתשלום עד ${fmtDate(m.due)}`}</div></div>
+          <div class="end" style="gap:6px;flex-wrap:wrap"><b class="num small">${ils(m.amount)}</b>
+            ${m.paid ? pill('green', 'שולם') : `<button class="btn btn-sm btn-primary" data-pay="${i}">${icon('check')}רישום תשלום</button>`}
+            <button class="btn btn-sm btn-ghost" data-edit="${i}">עריכה</button></div></li>`).join('')}</ul>`
+      : '<div class="empty">עוד לא הוגדרו אבני דרך לתשלום. מוסיפים אותן לפי ההסכם, למשל: מקדמה בחתימה, סיום הריסה, סיום שלד, מסירה.</div>',
+    foot: `<button class="btn btn-primary" id="ms-add">${icon('plus')}הוספת אבן דרך לתשלום</button><button class="btn btn-ghost" data-close>סגירה</button>`,
+    onOpen(el) {
+      el.querySelector('#ms-add').onclick = () => { closeModal(); milestoneForm(null); };
+      el.querySelectorAll('[data-pay]').forEach((b) => (b.onclick = () => { closeModal(); payForm(ms[b.dataset.pay]); }));
+      el.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => { closeModal(); milestoneForm(ms[b.dataset.edit]); }));
+    },
+  });
+}
+
+function milestoneForm(m) {
+  formModal({
+    title: m ? `עריכה: ${m.name}` : 'אבן דרך חדשה לתשלום',
+    fields: [
+      { id: 'name', label: 'שם אבן הדרך', value: m && m.name, required: true, placeholder: 'למשל: מקדמה בחתימת הסכם' },
+      { id: 'amount', label: 'סכום (₪)', type: 'number', value: m ? m.amount : '', required: true },
+      { id: 'due', label: 'מועד לתשלום', type: 'date', value: m && m.due },
+      ...(m && m.paid ? [
+        { id: 'paid', label: 'תאריך התשלום', type: 'date', value: m.paid },
+        { id: 'invoice', label: 'מספר חשבונית / קבלה', value: m.invoice },
+        { id: 'unpay', label: 'ביטול הסימון "שולם"', type: 'checkbox' },
+      ] : []),
+      ...(m ? [{ id: 'remove', label: 'מחיקת אבן הדרך', type: 'checkbox' }] : []),
+    ],
+    onSave(v) {
+      const ms = milestones();
+      if (m && v.remove) {
+        ms.splice(ms.indexOf(m), 1);
+        Store.log(`מחק אבן דרך לתשלום: ${m.name}`, TEAM.pm.name);
+        Store.save(); reopenPayments();
+        return 'אבן הדרך נמחקה';
+      }
+      const row = m || {};
+      Object.assign(row, { name: v.name, amount: v.amount, due: v.due || '' });
+      if (m && m.paid) { if (v.unpay) { row.paid = null; row.invoice = ''; } else { row.paid = v.paid || m.paid; row.invoice = v.invoice; } }
+      if (!m) { row.paid = null; ms.push(row); }
+      ms.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
+      Store.log(`${m ? 'עדכן' : 'הוסיף'} אבן דרך לתשלום: ${v.name} ${ils(v.amount)}`, TEAM.pm.name);
+      Store.save(); reopenPayments();
+      return m ? 'אבן הדרך עודכנה' : 'אבן הדרך נוספה';
+    },
+  });
+}
+
+function payForm(m) {
+  formModal({
+    title: 'רישום תשלום מהלקוח',
+    intro: `<b>${esc(m.name)}</b> · ${ils(m.amount)}`,
+    fields: [
+      { id: 'date', label: 'תאריך תשלום', type: 'date', value: TODAY },
+      { id: 'invoice', label: 'מספר חשבונית / קבלה (לא חובה)' },
+    ],
+    submit: 'סימון כשולם',
+    onSave(v) {
+      m.paid = v.date || TODAY;
+      m.invoice = v.invoice;
+      const casa = (Store.data.expenses || []).find((e) => e.casa);
+      if (casa) casa.payments.push({ date: m.paid, amount: m.amount });
+      Store.log(`עדכן תשלום: ${m.name} ${ils(m.amount)}`, TEAM.pm.name);
+      Store.save(); reopenPayments();
+      return 'התשלום נרשם';
+    },
+  });
+}
+
 // Photo upload form. target = null starts a new update; an existing update gets the new photos added to it
 // (e.g. one "demolition, week of ..." entry that grows during the week).
 function photoForm(target) {
@@ -482,41 +565,20 @@ const ACTIONS = {
     });
   },
   doc() { uploadDocFlow(); },
-  payment() {
-    const open = Store.data.casaMilestones.filter((m) => !m.paid);
-    if (!open.length) return toast('כל אבני הדרך שולמו');
-    formModal({
-      title: 'עדכון תשלום מהלקוח',
-      fields: [
-        { id: 'i', label: 'אבן דרך', type: 'select', options: open.map((m) => [Store.data.casaMilestones.indexOf(m), `${m.name} · ${ils(m.amount)}`]) },
-        { id: 'date', label: 'תאריך תשלום', type: 'date', value: TODAY },
-        { id: 'invoice', label: 'מספר חשבונית / קבלה', required: true },
-      ],
-      onSave(v) {
-        const m = Store.data.casaMilestones[v.i];
-        m.paid = v.date || TODAY;
-        m.invoice = v.invoice;
-        const casa = Store.data.expenses.find((e) => e.casa);
-        if (casa) casa.payments.push({ date: m.paid, amount: m.amount });
-        Store.log(`עדכן תשלום: ${m.name} ${ils(m.amount)}`, TEAM.office.name);
-        Store.save();
-        return 'התשלום נרשם';
-      },
-    });
-  },
+  payment() { paymentsModal(); },
   change() {
     formModal({
       title: 'שינוי / תוספת לחוזה',
       fields: [
         { id: 'title', label: 'תיאור השינוי', required: true },
-        { id: 'amount', label: 'עלות (₪)', type: 'number', required: true },
+        { id: 'amount', label: 'עלות (₪) + מע"מ', type: 'number', required: true },
       ],
       submit: 'שליחה לאישור הלקוח',
       onSave(v) {
         const no = Math.max(0, ...Store.data.changes.map((c) => c.no)) + 1;
         const id = 'c' + Date.now();
-        Store.data.changes.push({ id, no, title: v.title, amount: v.amount, status: 'pending', date: TODAY });
-        Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור שינוי #${no}: ${v.title}`, sub: `${ils(v.amount)} תוספת`, ref: { page: 'change', id }, level: 'yellow', done: false });
+        Store.data.changes.push({ id, no, title: v.title, amount: v.amount, vat: true, status: 'pending', date: TODAY });
+        Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור שינוי #${no}: ${v.title}`, sub: `${ils(v.amount)} + מע"מ תוספת`, ref: { page: 'change', id }, level: 'yellow', done: false });
         Store.log(`הוסיף שינוי #${no} – ${v.title}`, TEAM.pm.name);
         Store.notify(`שינוי #${no} ממתין לאישורך`, 'tasks');
         Store.save();

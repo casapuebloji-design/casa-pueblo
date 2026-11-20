@@ -31,7 +31,7 @@ function financeCasa() {
   return `
     <div class="kpis five">
       <div class="card stat"><div class="k">סה״כ התקשרות</div><div class="v num">${ils(cm.total)}</div><div class="s">כולל שינויים מאושרים ${ils(cm.approvedChanges)}</div></div>
-      <div class="card stat"><div class="k">שולם</div><div class="v num">${ils(cm.paid)}</div><div class="s">${pct(cm.paid / cm.total * 100, 0)} מההתקשרות</div></div>
+      <div class="card stat"><div class="k">שולם</div><div class="v num">${ils(cm.paid)}</div><div class="s">${pct(cm.total ? cm.paid / cm.total * 100 : 0, 0)} מההתקשרות</div></div>
       <div class="card stat"><div class="k">יתרה לתשלום</div><div class="v num">${ils(cm.left)}</div><div class="s">${cm.ms.filter((m) => !m.paid).length} אבני דרך פתוחות</div></div>
       <div class="card stat accent"><div class="k">התשלום הבא</div><div class="v num">${cm.next ? ils(cm.next.amount) : '—'}</div><div class="s">${cm.next ? esc(cm.next.name) : ''}</div></div>
       <div class="card stat"><div class="k">מועד התשלום הבא</div><div class="v">${cm.next ? fmtDate(cm.next.due) : '—'}</div><div class="s">${cm.next ? `בעוד ${daysBetween(TODAY, cm.next.due)} ימים` : ''}</div></div>
@@ -40,7 +40,7 @@ function financeCasa() {
     <div class="grid wide-left" style="margin-top:14px">
       <article class="card card-pad">
         <div class="card-head"><h3>אבני דרך לתשלום</h3><span class="small muted">${cm.ms.filter((m) => m.paid).length} מתוך ${cm.ms.length} שולמו</span></div>
-        <div class="progress dark terra" style="margin-bottom:6px"><i style="width:${(cm.paid / cm.total * 100).toFixed(1)}%"></i></div>
+        <div class="progress dark terra" style="margin-bottom:6px"><i style="width:${(cm.total ? cm.paid / cm.total * 100 : 0).toFixed(1)}%"></i></div>
         <ul class="milestones">
           ${cm.ms.map((m) => `
             <li class="${m.paid ? 'paid' : m === cm.next ? 'next' : ''}">
@@ -63,7 +63,7 @@ function financeCasa() {
           <div class="card-pad" style="padding-bottom:4px"><h3>שינויים ותוספות</h3></div>
           <ul class="rows">
             ${d.changes.map((c) => `<li class="row compact"><div class="main-col"><div class="title">#${c.no} ${esc(c.title)}</div><div class="sub">${fmtDate(c.date)}</div></div>
-              <div class="end"><span class="num small">${ils(c.amount)}</span>${c.status === 'approved' ? pill('green', 'אושר') : pill('yellow', 'ממתין')}</div></li>`).join('')}
+              <div class="end"><span class="num small">${ils(c.amount)}${c.vat ? ' + מע"מ' : ''}</span>${c.status === 'approved' ? pill('green', 'אושר') : pill('yellow', 'ממתין')}</div></li>`).join('')}
           </ul>
         </article>
       </div>
