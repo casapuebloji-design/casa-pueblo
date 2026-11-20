@@ -227,7 +227,7 @@ Pages.home = () => {
         <div><div class="k">תאריך התחלה</div><div class="v">${fmtDate(p.start)}</div></div>
         <div><div class="k">מסירה משוערת</div><div class="v">${fmtDate(p.handover)}</div></div>
         <div><div class="k">עד המסירה</div><div class="v">${daysLeft} <span style="font-size:.55em">ימים</span></div></div>
-        <div><div class="k">מנהל הפרויקט</div><div class="v" style="font-size:22px;margin-top:8px">${esc(pm.name)}</div><div class="s"><a href="tel:${pm.phone}" class="ltr">${pm.phone}</a></div></div>
+        <div><div class="k">מנהל הפרויקט</div><div class="v" style="font-size:22px;margin-top:8px">${esc(pm.name)}</div><div class="s">${pm.phone ? `<a href="tel:${esc(pm.phone)}" class="ltr">${esc(pm.phone)}</a>` : ''}</div></div>
       </div>
 
       <div class="grid wide-left" style="margin-top:34px">
@@ -323,8 +323,8 @@ Pages.project = () => {
                 <span class="avatar navy">${initials(t.name)}</span>
                 <div class="info"><div class="name">${esc(t.name)}</div><div class="role">${esc(t.role)}</div>
                   <div class="acts">
-                    <a class="btn btn-sm btn-ghost" href="tel:${t.phone}">${icon('phone')}<span class="ltr">${t.phone}</span></a>
-                    <a class="btn btn-sm btn-ghost" href="mailto:${t.email}" aria-label="מייל">${icon('mail')}</a>
+                    ${t.phone ? `<a class="btn btn-sm btn-ghost" href="tel:${esc(t.phone)}">${icon('phone')}<span class="ltr">${esc(t.phone)}</span></a>` : ''}
+                    ${t.email ? `<a class="btn btn-sm btn-ghost" href="mailto:${esc(t.email)}" aria-label="מייל">${icon('mail')}</a>` : ''}
                   </div>
                 </div>
               </div>`).join('')}

@@ -773,9 +773,11 @@ Pages['bo-new'] = (q) => { const L = leadFor(q) || {}; return (!isJorge() ? { ti
 // Creates the project row, uploads its cover photo and invites the family by email.
 async function createLiveProject(f) {
   await Live.flush();
-  const team = JSON.parse(JSON.stringify(TEAM));
-  team.pm.name = f.get('pm');
-  team.architect.name = f.get('arch');
+  const team = {
+    pm: { name: f.get('pm') || '', role: 'מנהל פרויקט', phone: '', email: '' },
+    architect: { name: f.get('arch') || '', role: 'אדריכלית ומעצבת', phone: '', email: '' },
+    office: { name: '', role: 'הנהלת חשבונות', phone: '', email: '' },
+  };
   const members = [['c1', 'בעל הבית'], ['c2', 'בן/בת זוג']]
     .filter(([k]) => f.get(k) || f.get(k + 'c'))
     .map(([k, role]) => ({ name: f.get(k) || '', role, email: /@/.test(f.get(k + 'c')) ? f.get(k + 'c').trim().toLowerCase() : '', phone: /@/.test(f.get(k + 'c')) ? '' : f.get(k + 'c'), status: 'הוזמן' }));
