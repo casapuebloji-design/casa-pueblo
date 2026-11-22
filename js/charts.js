@@ -52,14 +52,41 @@ function financeModel(d) {
   };
 }
 
+// Payments to Casa Pueblo. The contract payments (from the signed agreement) and the approved
+// additions are tracked separately: "paid" and "left" refer to the contract only.
 function casaModel(d) {
-  const ms = d.casaMilestones;
-  const total = ms.reduce((s, m) => s + m.amount, 0);
-  const paid = ms.filter((m) => m.paid).reduce((s, m) => s + m.amount, 0);
+  const ms = d.casaMilestones || [];
+  const sum = (list) => list.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const contract = sum(ms) || Number(d.project.contract) || 0;
+  const paid = sum(ms.filter((m) => m.paid));
   const next = ms.find((m) => !m.paid);
-  const approvedChanges = d.changes.filter((c) => c.status === 'approved').reduce((s, c) => s + c.amount, 0);
-  return { ms, total, paid, left: total - paid, next, approvedChanges };
+  const adds = (d.changes || []).filter((c) => c.status === 'approved');
+  const pending = (d.changes || []).filter((c) => c.status !== 'approved');
+  const addTotal = sum(adds);
+  const addPaid = sum(adds.filter((c) => c.paid));
+  return {
+    ms, contract, total: contract, paid, left: contract - paid, next,
+    adds, pending, addTotal, addPaid, addLeft: addTotal - addPaid, approvedChanges: addTotal,
+    grand: contract + addTotal,
+  };
 }
+
+// The whole project: Casa Pueblo (contract + additions) plus the family's other expenses.
+function forecastModel(d) {
+  const cm = casaModel(d);
+  const others = (d.expenses || []).filter((e) => !e.casa).map((e) => ({ ...e, paid: expensePaid(e), remaining: e.total - expensePaid(e) }));
+  const oTotal = others.reduce((s, e) => s + e.total, 0);
+  const oPaid = others.reduce((s, e) => s + e.paid, 0);
+  const grand = cm.grand + oTotal;
+  const paidAll = cm.paid + cm.addPaid + oPaid;
+  return { cm, others, oTotal, oPaid, grand, paidAll, leftAll: grand - paidAll };
+}
+
+// When a contract payment is due: the contract's own wording ("בסיום שלד") and/or a date.
+function payWhen(m) {
+  return [m.when, m.due ? `עד ${fmtDate(m.due)}` : ''].filter(Boolean).join(' · ');
+}
+function shareOf(v, of) { return pct(of ? v / of * 100 : 0, 0); }
 
 /* ---------- charts ---------- */
 

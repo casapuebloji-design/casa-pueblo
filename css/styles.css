@@ -825,3 +825,56 @@ fieldset.field.checks > span { display: block; font-size: 13px; font-weight: 600
 .todo-check input { width: 20px; height: 20px; accent-color: var(--st-green); cursor: pointer; }
 .todo-row.is-done .title { text-decoration: line-through; color: var(--muted); }
 .cal-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* payments to Casa Pueblo: one row per contract payment, with a V box */
+.pay-list { list-style: none; margin: 0; padding: 0; }
+.pay-list li { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.pay-list li:first-child { border-top: 0; }
+.pay-list .pl-main { display: flex; flex-direction: column; min-width: 0; }
+.pay-list .pl-main b { font-weight: 600; }
+.pay-list .sub { font-size: 13px; color: var(--muted); }
+.pay-list .pl-amt { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: left; }
+.pay-list li.total { border-top: 2px solid var(--ink); }
+.pay-list li.total .pl-main b, .pay-list li.total .pl-amt b { font-weight: 700; }
+.pay-list li.paid .pl-main b { color: var(--ink-2, var(--ink)); }
+.pay-list li.next .pl-main b { color: var(--terra); }
+.pay-check { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--st-gray); background: transparent; display: grid; place-items: center; padding: 0; color: #fff; }
+button.pay-check { cursor: pointer; }
+button.pay-check:hover { border-color: var(--st-green); }
+.pay-check.on { background: var(--st-green); border-color: var(--st-green); }
+.pay-check svg { width: 15px; height: 15px; }
+.pay-check.muted { border-style: dashed; opacity: .5; }
+.pay-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 10px; }
+.pay-sum div { background: var(--sand); border-radius: var(--radius-sm); padding: 8px 10px; }
+.pay-sum dt { font-size: 12px; color: var(--muted); }
+.pay-sum dd { margin: 2px 0 0; font-weight: 700; }
+.pay-sum dd span { font-weight: 400; font-size: 12px; color: var(--muted); }
+
+/* the payment plan editor */
+.pp-row { display: grid; grid-template-columns: 2fr 1.6fr 1.2fr 70px 1.1fr 34px; gap: 8px; align-items: end; padding: 10px 0; border-top: 1px solid var(--line); }
+.pp-row:first-child { border-top: 0; }
+.pp-f { display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.pp-f span { font-size: 12px; color: var(--muted); }
+.pp-f .input { padding: 8px 10px; }
+.pp-del { align-self: end; margin-bottom: 4px; }
+.pp-paid { grid-column: 1 / -1; font-size: 12px; color: var(--st-green); display: flex; gap: 4px; align-items: center; }
+.pp-total { margin-top: 10px; font-size: 14px; }
+@media (max-width: 720px) {
+  .pp-row { grid-template-columns: 1fr 1fr 34px; }
+  .pp-f.name { grid-column: 1 / -1; }
+  .pp-f.when { grid-column: 1 / 2; }
+  .pp-f.due { grid-column: 2 / 4; }
+  .pp-f.pct { grid-column: 1 / 2; }
+  .pp-f.amt { grid-column: 2 / 3; }
+}
+
+/* optional fields folded away */
+details.more-fields { margin: 4px 0 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; }
+details.more-fields summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink-2, var(--ink)); }
+details.more-fields[open] summary { margin-bottom: 10px; }
+
+.pp-f .input.bad { border-color: var(--st-red); box-shadow: 0 0 0 3px var(--st-red-bg); }
+.pp-no { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--ink-2); margin-bottom: -2px; }
+.pp-err { color: var(--st-red); font-size: 14px; font-weight: 600; align-self: center; }
+.pay-no { display: inline-block; font-size: 12px; font-weight: 700; color: var(--terra); background: var(--terra-soft); border-radius: 99px; padding: 1px 8px; margin-inline-end: 6px; vertical-align: 1px; white-space: nowrap; }
+.theme-navy .pay-no { background: rgba(212, 180, 131, .14); color: var(--gold); }

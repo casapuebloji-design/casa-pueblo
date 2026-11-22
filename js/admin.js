@@ -9,6 +9,8 @@ function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, v
     if (f.type === 'checkbox') return `<label class="check"><input type="checkbox" name="${f.id}" ${v ? 'checked' : ''}><span>${esc(f.label)}</span></label>`;
     if (f.type === 'range') return `<label class="field"><span>${esc(f.label)}: <b id="rv-${f.id}">${v}%</b></span><input type="range" name="${f.id}" min="0" max="100" value="${v}" style="width:100%;accent-color:var(--navy)" oninput="document.getElementById('rv-${f.id}').textContent=this.value+'%'"></label>`;
     if (f.type === 'checks') return `<fieldset class="field checks"><span>${esc(f.label)}</span><div class="chips-input">${f.options.map((o) => `<label><input type="checkbox" name="${f.id}" value="${esc(o)}" ${(f.value || []).includes(o) ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div></fieldset>`;
+    // Amounts are typed as in a contract, with or without commas (10,000), so they are text fields read with moneyNum.
+    if (f.type === 'number') return `<label class="field"><span>${esc(f.label)}</span><input class="input num" type="text" inputmode="decimal" data-money name="${f.id}" value="${esc(moneyFmt(v))}" placeholder="${esc(f.placeholder || '')}"></label>`;
     if (f.type === 'file') return `<label class="field"><span>${esc(f.label)}</span><input class="input" type="file" name="${f.id}" ${f.multiple ? 'multiple' : ''} accept="${f.accept || ''}"></label>`;
     return `<label class="field"><span>${esc(f.label)}</span><input class="input" type="${f.type || 'text'}" name="${f.id}" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}"></label>`;
   };
@@ -25,7 +27,7 @@ function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, v
         fields.forEach((f) => {
           if (f.type === 'checks') { vals[f.id] = [...el.querySelectorAll(`[name="${f.id}"]:checked`)].map((x) => x.value); return; }
           const inp = el.querySelector(`[name="${f.id}"]`);
-          vals[f.id] = f.type === 'checkbox' ? inp.checked : f.type === 'file' ? inp.files : f.type === 'number' || f.type === 'range' ? Number(inp.value) : inp.value.trim();
+          vals[f.id] = f.type === 'checkbox' ? inp.checked : f.type === 'file' ? inp.files : f.type === 'number' ? moneyNum(inp.value) : f.type === 'range' ? Number(inp.value) : inp.value.trim();
         });
         const missing = fields.find((f) => f.required && !vals[f.id]);
         if (missing) { el.querySelector('#fm-err').textContent = `צריך למלא: ${missing.label}`; return; }
@@ -179,7 +181,7 @@ const PROJECT_ACTIONS = [
   ['material', 'materials', 'הוספת חומר ו/או מוצר'],
   ['photos', 'camera', 'העלאת תמונות'],
   ['doc', 'documents', 'העלאת מסמך'],
-  ['payment', 'finance', 'עדכון תשלום'],
+  ['payment', 'finance', 'תשלומים לפי ההסכם'],
   ['change', 'plus', 'שינוי / תוספת'],
   ['pro', 'pros', 'הוספת בעל מקצוע'],
   ['member', 'users', 'הזמנת משתמש לפרויקט'],
@@ -188,85 +190,138 @@ const PROJECT_ACTIONS = [
 // Back Office actions only Jorge sees (permissions questionnaire).
 const JORGE_ACTIONS = ['details', 'payment', 'change', 'member'];
 
-/* ---------- Payments to Casa Pueblo: the milestone plan from the contract, and recording each payment ---------- */
+/* ---------- Payments to Casa Pueblo: the payment plan from the signed contract ---------- */
+// Each payment: { name, when (the contract's wording, e.g. "בסיום שלד"), due (optional date), amount, paid (date|null), invoice }.
+// Payments are ticked as paid on the finance page; this editor sets up the plan itself.
 function milestones() { return Store.data.casaMilestones || (Store.data.casaMilestones = []); }
-const reopenPayments = () => setTimeout(paymentsModal, 0); // after the form closes, back to the list
 
-function paymentsModal() {
-  const ms = milestones();
-  const total = ms.reduce((s, m) => s + (Number(m.amount) || 0), 0);
-  const paid = ms.filter((m) => m.paid).reduce((s, m) => s + (Number(m.amount) || 0), 0);
+function paymentPlanEditor({ fromContract = false } = {}) {
+  const p = Store.data.project;
+  let rows = milestones().map((m) => ({ ...m }));
+  if (!rows.length) rows = [{}, {}, {}];
+  // Amounts may be typed with commas or a shekel sign (480,000 / ₪480000): keep only the number.
+  const toNum = (v) => Number(String(v == null ? '' : v).replace(/[^\d.]/g, '')) || '';
+  const fmtNum = (v) => (v ? Number(v).toLocaleString('en-US') : '');
+  let contract = Number(p.contract) || rows.reduce((s, r) => s + (Number(r.amount) || 0), 0) || '';
+  const pctOf = (amt) => (contract && amt ? Math.round(amt / contract * 1000) / 10 : '');
+
+  const rowHtml = (r, i) => `
+    <div class="pp-row" data-i="${i}">
+      <div class="pp-no">תשלום ${i + 1}</div>
+      <label class="pp-f name"><span>תיאור התשלום</span><input class="input" data-k="name" value="${esc(r.name || '')}" placeholder="למשל: מקדמה"></label>
+      <label class="pp-f when"><span>מתי (לפי ההסכם)</span><input class="input" data-k="when" value="${esc(r.when || '')}" placeholder="למשל: בסיום השלד"></label>
+      <label class="pp-f due"><span>תאריך (לא חובה)</span><input class="input" type="date" data-k="due" value="${esc(r.due || '')}"></label>
+      <label class="pp-f pct"><span>%</span><input class="input num" type="text" inputmode="decimal" data-k="pct" value="${pctOf(r.amount)}"></label>
+      <label class="pp-f amt"><span>סכום (₪)</span><input class="input num" type="text" inputmode="decimal" data-k="amount" value="${fmtNum(r.amount)}"></label>
+      <button class="icon-btn pp-del" data-del="${i}" aria-label="מחיקת תשלום ${i + 1}" title="מחיקה">${icon('close')}</button>
+      ${r.paid ? `<span class="pp-paid">${icon('check', 'xs')}שולם ${fmtDate(r.paid)}</span>` : ''}
+    </div>`;
+
   openModal({
-    title: 'תשלומים לקאסה פואבלו',
+    title: 'התשלומים לפי הסכם ההתקשרות',
     wide: true,
-    body: ms.length
-      ? `<p class="small ink-2" style="margin-top:0">סה״כ ${ils(total)} · שולם ${ils(paid)} · יתרה ${ils(total - paid)}</p>
-        <ul class="rows">${ms.map((m, i) => `<li class="row compact">
-          <div class="main-col"><div class="title">${esc(m.name)}</div><div class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice ? ` · ${esc(m.invoice)}` : ''}` : `לתשלום עד ${fmtDate(m.due)}`}</div></div>
-          <div class="end" style="gap:6px;flex-wrap:wrap"><b class="num small">${ils(m.amount)}</b>
-            ${m.paid ? pill('green', 'שולם') : `<button class="btn btn-sm btn-primary" data-pay="${i}">${icon('check')}רישום תשלום</button>`}
-            <button class="btn btn-sm btn-ghost" data-edit="${i}">עריכה</button></div></li>`).join('')}</ul>`
-      : '<div class="empty">עוד לא הוגדרו אבני דרך לתשלום. מוסיפים אותן לפי ההסכם, למשל: מקדמה בחתימה, סיום הריסה, סיום שלד, מסירה.</div>',
-    foot: `<button class="btn btn-primary" id="ms-add">${icon('plus')}הוספת אבן דרך לתשלום</button><button class="btn btn-ghost" data-close>סגירה</button>`,
+    body: `
+      ${fromContract ? '<p class="small" style="margin-top:0"><b>ההסכם נשמר במסמכים.</b> עכשיו רושמים כאן את התשלומים שמופיעים בו. כל תשלום יופיע ללקוח בנפרד בעמוד הכספים, עם ריבוע לסימון כשהוא משולם.</p>'
+        : '<p class="small ink-2" style="margin-top:0">כל תשלום מופיע ללקוח בנפרד בעמוד הכספים. אפשר לרשום אחוז מסכום ההסכם, והסכום יחושב לבד.</p>'}
+      <label class="field" style="max-width:280px"><span>סכום ההסכם (₪, כולל מע"מ)</span><input class="input num" type="text" inputmode="decimal" id="pp-contract" value="${fmtNum(contract)}"></label>
+      <div id="pp-rows"></div>
+      <button class="link-btn" id="pp-add" style="margin-top:6px">${icon('plus')}הוספת תשלום</button>
+      <div class="pp-total" id="pp-total"></div>`,
+    // The message sits next to the save button, so it is seen even when the list is long.
+    foot: `<button class="btn btn-primary" id="pp-save">${icon('check')}שמירה</button><button class="btn btn-ghost" data-close>ביטול</button><span class="pp-err" id="pp-err" role="alert"></span>`,
     onOpen(el) {
-      el.querySelector('#ms-add').onclick = () => { closeModal(); milestoneForm(null); };
-      el.querySelectorAll('[data-pay]').forEach((b) => (b.onclick = () => { closeModal(); payForm(ms[b.dataset.pay]); }));
-      el.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => { closeModal(); milestoneForm(ms[b.dataset.edit]); }));
+      const box = el.querySelector('#pp-rows');
+      const collect = () => box.querySelectorAll('.pp-row').forEach((row) => {
+        const r = rows[row.dataset.i];
+        row.querySelectorAll('[data-k]').forEach((inp) => { if (inp.dataset.k !== 'pct') r[inp.dataset.k] = inp.dataset.k === 'amount' ? toNum(inp.value) : inp.value.trim(); });
+      });
+      const total = () => {
+        const sum = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const diff = contract ? contract - sum : 0;
+        el.querySelector('#pp-total').innerHTML = `סה״כ התשלומים: <b class="num">${ils(sum)}</b>${contract && Math.abs(diff) >= 1
+          ? ` · <span style="color:var(--st-red)">${diff > 0 ? `חסרים ${ils(diff)}` : `עודף של ${ils(-diff)}`} מול סכום ההסכם</span>`
+          : contract ? ' · <span style="color:var(--st-green, #2e7d4f)">תואם לסכום ההסכם</span>' : ''}`;
+      };
+      const draw = () => {
+        box.innerHTML = rows.map(rowHtml).join('');
+        box.querySelectorAll('.pp-row').forEach((row) => {
+          const r = rows[row.dataset.i];
+          const pctIn = row.querySelector('[data-k="pct"]');
+          const amtIn = row.querySelector('[data-k="amount"]');
+          pctIn.oninput = () => { if (contract && toNum(pctIn.value) !== '') { r.amount = Math.round(contract * toNum(pctIn.value) / 100); amtIn.value = fmtNum(r.amount); } total(); };
+          amtIn.oninput = () => { r.amount = toNum(amtIn.value); pctIn.value = pctOf(r.amount); total(); };
+          amtIn.onblur = () => { amtIn.value = fmtNum(toNum(amtIn.value)); }; // 450000 → 450,000, as in the contract
+        });
+        box.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => {
+          collect();
+          const r = rows[b.dataset.del];
+          if (r.paid && b.dataset.sure !== '1') { b.dataset.sure = '1'; toast('התשלום הזה כבר סומן כשולם. ללחוץ שוב כדי למחוק'); return; }
+          rows.splice(Number(b.dataset.del), 1);
+          draw();
+        }));
+        total();
+      };
+      el.querySelector('#pp-contract').oninput = (e) => {
+        collect();
+        contract = toNum(e.target.value);
+        box.querySelectorAll('.pp-row').forEach((row) => { row.querySelector('[data-k="pct"]').value = pctOf(rows[row.dataset.i].amount); });
+        total();
+      };
+      el.querySelector('#pp-contract').onblur = (e) => { e.target.value = fmtNum(toNum(e.target.value)); };
+      el.querySelector('#pp-add').onclick = () => { collect(); rows.push({}); draw(); box.querySelector('.pp-row:last-child [data-k="name"]').focus(); };
+      el.querySelector('#pp-save').onclick = () => { try {
+        collect();
+        box.querySelectorAll('.bad').forEach((x) => x.classList.remove('bad'));
+        const list = rows.filter((r) => r.name || r.amount || r.when || r.due);
+        // Only the amount is required. A payment with no description takes the "when" text, or its number.
+        const bad = list.findIndex((r) => !(r.amount > 0));
+        if (bad >= 0) {
+          // Show what is missing where it can be seen: a message by the save button, and the field marked and scrolled to.
+          const i = rows.indexOf(list[bad]);
+          const msg = `בתשלום ${i + 1} חסר סכום.`;
+          el.querySelector('#pp-err').textContent = msg;
+          const f = box.querySelector(`.pp-row[data-i="${i}"] [data-k="amount"]`);
+          if (f) { f.classList.add('bad'); f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.focus({ preventScroll: true }); }
+          return;
+        }
+        Store.data.casaMilestones = list.map((r) => ({ name: r.name || r.when || `תשלום ${rows.indexOf(r) + 1}`, when: r.name ? r.when || '' : '', due: r.due || '', amount: Number(r.amount), paid: r.paid || null, invoice: r.invoice || '' }));
+        const proj = Store.data.project; // the project may have been reloaded while the window was open
+        proj.contract = Number(contract) || list.reduce((s, r) => s + Number(r.amount), 0);
+        Store.log(`עדכן את התשלומים לפי ההסכם: ${list.length} תשלומים, ${ils(proj.contract)}`, TEAM.pm.name);
+        Store.save();
+        closeModal();
+        toast(list.length ? `נשמרו ${list.length} תשלומים` : 'התשלומים נמחקו');
+        App.render();
+        setTimeout(paymentsBoard, 0); // back to the payments screen, where they are ticked as paid
+      } catch (e) { toast('השמירה לא הצליחה: ' + e.message); } };
+      draw();
     },
   });
 }
 
-function milestoneForm(m) {
-  formModal({
-    title: m ? `עריכה: ${m.name}` : 'אבן דרך חדשה לתשלום',
-    fields: [
-      { id: 'name', label: 'שם אבן הדרך', value: m && m.name, required: true, placeholder: 'למשל: מקדמה בחתימת הסכם' },
-      { id: 'amount', label: 'סכום (₪) כולל מע"מ', type: 'number', value: m ? m.amount : '', required: true },
-      { id: 'due', label: 'מועד לתשלום', type: 'date', value: m && m.due },
-      ...(m && m.paid ? [
-        { id: 'paid', label: 'תאריך התשלום', type: 'date', value: m.paid },
-        { id: 'invoice', label: 'מספר חשבונית / קבלה', value: m.invoice },
-        { id: 'unpay', label: 'ביטול הסימון "שולם"', type: 'checkbox' },
-      ] : []),
-      ...(m ? [{ id: 'remove', label: 'מחיקת אבן הדרך', type: 'checkbox' }] : []),
-    ],
-    onSave(v) {
-      const ms = milestones();
-      if (m && v.remove) {
-        ms.splice(ms.indexOf(m), 1);
-        Store.log(`מחק אבן דרך לתשלום: ${m.name}`, TEAM.pm.name);
-        Store.save(); reopenPayments();
-        return 'אבן הדרך נמחקה';
-      }
-      const row = m || {};
-      Object.assign(row, { name: v.name, amount: v.amount, due: v.due || '' });
-      if (m && m.paid) { if (v.unpay) { row.paid = null; row.invoice = ''; } else { row.paid = v.paid || m.paid; row.invoice = v.invoice; } }
-      if (!m) { row.paid = null; ms.push(row); }
-      ms.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
-      Store.log(`${m ? 'עדכן' : 'הוסיף'} אבן דרך לתשלום: ${v.name} ${ils(v.amount)}`, TEAM.pm.name);
-      Store.save(); reopenPayments();
-      return m ? 'אבן הדרך עודכנה' : 'אבן הדרך נוספה';
-    },
-  });
-}
-
-function payForm(m) {
-  formModal({
-    title: 'רישום תשלום מהלקוח',
-    intro: `<b>${esc(m.name)}</b> · ${ils(m.amount)}`,
-    fields: [
-      { id: 'date', label: 'תאריך תשלום', type: 'date', value: TODAY },
-      { id: 'invoice', label: 'מספר חשבונית / קבלה (לא חובה)' },
-    ],
-    submit: 'סימון כשולם',
-    onSave(v) {
-      m.paid = v.date || TODAY;
-      m.invoice = v.invoice;
-      const casa = (Store.data.expenses || []).find((e) => e.casa);
-      if (casa) casa.payments.push({ date: m.paid, amount: m.amount });
-      Store.log(`עדכן תשלום: ${m.name} ${ils(m.amount)}`, TEAM.pm.name);
-      Store.save(); reopenPayments();
-      return 'התשלום נרשם';
+// Back Office: the contract payments and additions, where Jorge ticks what was paid.
+// The family sees the same lists, read-only, on their finance page.
+function paymentsBoard() {
+  const cm = casaModel(Store.data);
+  const reopen = () => { closeModal(); App.render(); paymentsBoard(); };
+  openModal({
+    title: 'תשלומים לפי ההסכם',
+    wide: true,
+    body: cm.ms.length || cm.adds.length || cm.pending.length ? `
+      <dl class="pay-sum">
+        <div><dt>סה״כ ההסכם</dt><dd class="num">${ils(cm.contract)}</dd></div>
+        <div><dt>שולם עד עכשיו</dt><dd class="num">${ils(cm.paid)} <span>${shareOf(cm.paid, cm.contract)}</span></dd></div>
+        <div><dt>יתרה לתשלום</dt><dd class="num">${ils(cm.left)} <span>${shareOf(cm.left, cm.contract)}</span></dd></div>
+      </dl>
+      ${contractPaymentsHtml(cm, true) || '<div class="empty">עוד לא הוזנו התשלומים מההסכם.</div>'}
+      <p class="form-hint">לוחצים על הריבוע כשתשלום מתקבל. הלקוח רואה אותו מסומן כשולם בעמוד הכספים.</p>
+      <h3 style="margin:22px 0 10px">תוספות ושינויים</h3>
+      ${additionsHtml(cm, true)}`
+      : '<div class="empty">עוד לא הוזנו התשלומים מההסכם. לוחצים "עריכת התשלומים", או מעלים את ההסכם ב"העלאת מסמך" בקטגוריה "הסכם התקשרות".</div>',
+    foot: `<button class="btn btn-primary" id="pb-edit">${icon('edit')}${cm.ms.length ? 'עריכת התשלומים' : 'הזנת התשלומים מההסכם'}</button><button class="btn btn-ghost" data-close>סגירה</button>`,
+    onOpen(el) {
+      el.querySelectorAll('[data-paycheck]').forEach((b) => (b.onclick = () => togglePaid(b.dataset.paycheck, reopen)));
+      el.querySelector('#pb-edit').onclick = () => { closeModal(); paymentPlanEditor(); };
     },
   });
 }
@@ -568,7 +623,7 @@ const ACTIONS = {
     });
   },
   doc() { uploadDocFlow(); },
-  payment() { paymentsModal(); },
+  payment() { paymentsBoard(); },
   change() {
     formModal({
       title: 'שינוי / תוספת לחוזה',
@@ -648,7 +703,7 @@ Pages['bo-project'] = () => {
         <div class="card stat"><div class="k">שלב</div><div class="v" style="font-size:20px">${esc(p.stage)}</div><div class="s">${p.progress}% התקדמות</div></div>
         <div class="card stat ${open.some((t) => t.level === 'red') ? 'alert' : ''}"><div class="k">ממתין ללקוח</div><div class="v">${open.length}</div><div class="s">${open.filter((t) => t.type === 'approval').length} אישורים</div></div>
         <div class="card stat"><div class="k">עדכון שבועי אחרון</div><div class="v" style="font-size:20px">${fmtDate(p.weekly.updated)}</div><div class="s">לפני ${daysBetween(p.weekly.updated, TODAY)} ימים</div></div>
-        <div class="card stat"><div class="k">ניצול תקציב המשפחה</div><div class="v">${pct(financeModel(d).util)}</div></div>
+        ${(() => { const cm = casaModel(d); return `<div class="card stat"><div class="k">שולם מההסכם</div><div class="v">${shareOf(cm.paid, cm.contract)}</div><div class="s">${ils(cm.paid)} מתוך ${ils(cm.contract)}</div></div>`; })()}
       </div>
       <div class="section-title"><h2>פעולות</h2></div>
       <div class="actions-grid">
@@ -738,10 +793,10 @@ Pages['bo-new'] = (q) => { const L = leadFor(q) || {}; return (!isJorge() ? { ti
         <label class="field"><span>אדריכלית / מעצבת</span><input class="input" name="arch" list="team-names" value="${esc(L.designer || '')}"></label>
         <datalist id="team-names">${STAFF_PICK.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
         <label class="field"><span>סוג הפרויקט</span><select class="input" name="ptype">${PROJECT_TYPES.map((t) => `<option ${t === L.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
-        <label class="field"><span>סכום השיפוץ (₪) כולל מע"מ</span><input class="input" type="number" name="amount" inputmode="numeric" value="${esc(L.amount || '')}"></label>
+        <label class="field"><span>סכום השיפוץ (₪) כולל מע"מ</span><input class="input num" type="text" name="amount" inputmode="decimal" data-money value="${esc(moneyFmt(L.amount))}"></label>
         <label class="field"><span>תאריך התחלה</span><input class="input" type="date" name="start" value="${L.start_month ? L.start_month + '-01' : TODAY}"></label>
         <label class="field"><span>תאריך יעד</span><input class="input" type="date" name="end" value="${L.start_month && L.duration_months ? (() => { const [y, m] = L.start_month.split('-').map(Number); const d = new Date(y, m - 1 + Number(L.duration_months), 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; })() : ''}"></label>
-        <label class="field"><span>תקציב כולל של המשפחה (לא חובה)</span><input class="input" type="number" name="budget" inputmode="numeric"></label>
+        <label class="field"><span>תקציב כולל של המשפחה (לא חובה)</span><input class="input num" type="text" name="budget" inputmode="decimal" data-money></label>
         <label class="field"><span>תמונה ראשית</span><input class="input" type="file" name="img" accept="image/*"></label>
       </div>
       <label class="check"><input type="checkbox" name="invite" checked><span>לשלוח ללקוחות הזמנה לפתיחת משתמש</span></label>
@@ -785,10 +840,10 @@ async function createLiveProject(f) {
     .map(([k, role]) => ({ name: f.get(k) || '', role, email: /@/.test(f.get(k + 'c')) ? f.get(k + 'c').trim().toLowerCase() : '', phone: /@/.test(f.get(k + 'c')) ? '' : f.get(k + 'c'), status: 'הוזמן' }));
   const data = emptyProjectData({
     name: f.get('name'), family: f.get('family'), address: f.get('address') || '', start: f.get('start') || TODAY,
-    handover: f.get('end') || '', budget: Number(f.get('budget')) || 0, team, members, template: !!f.get('tpl'),
+    handover: f.get('end') || '', budget: moneyNum(f.get('budget')), team, members, template: !!f.get('tpl'),
   });
   data.project.type = f.get('ptype') || '';
-  data.project.contract = Number(f.get('amount')) || 0;
+  data.project.contract = moneyNum(f.get('amount'));
   const pid = await Live.createProject(data);
   await Live.open(pid);
   const img = f.get('img');
