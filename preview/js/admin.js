@@ -9,6 +9,8 @@ function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, v
     if (f.type === 'checkbox') return `<label class="check"><input type="checkbox" name="${f.id}" ${v ? 'checked' : ''}><span>${esc(f.label)}</span></label>`;
     if (f.type === 'range') return `<label class="field"><span>${esc(f.label)}: <b id="rv-${f.id}">${v}%</b></span><input type="range" name="${f.id}" min="0" max="100" value="${v}" style="width:100%;accent-color:var(--navy)" oninput="document.getElementById('rv-${f.id}').textContent=this.value+'%'"></label>`;
     if (f.type === 'checks') return `<fieldset class="field checks"><span>${esc(f.label)}</span><div class="chips-input">${f.options.map((o) => `<label><input type="checkbox" name="${f.id}" value="${esc(o)}" ${(f.value || []).includes(o) ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div></fieldset>`;
+    // Amounts are typed as in a contract, with or without commas (10,000), so they are text fields read with moneyNum.
+    if (f.type === 'number') return `<label class="field"><span>${esc(f.label)}</span><input class="input num" type="text" inputmode="decimal" data-money name="${f.id}" value="${esc(moneyFmt(v))}" placeholder="${esc(f.placeholder || '')}"></label>`;
     if (f.type === 'file') return `<label class="field"><span>${esc(f.label)}</span><input class="input" type="file" name="${f.id}" ${f.multiple ? 'multiple' : ''} accept="${f.accept || ''}"></label>`;
     return `<label class="field"><span>${esc(f.label)}</span><input class="input" type="${f.type || 'text'}" name="${f.id}" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}"></label>`;
   };
@@ -25,7 +27,7 @@ function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, v
         fields.forEach((f) => {
           if (f.type === 'checks') { vals[f.id] = [...el.querySelectorAll(`[name="${f.id}"]:checked`)].map((x) => x.value); return; }
           const inp = el.querySelector(`[name="${f.id}"]`);
-          vals[f.id] = f.type === 'checkbox' ? inp.checked : f.type === 'file' ? inp.files : f.type === 'number' || f.type === 'range' ? Number(inp.value) : inp.value.trim();
+          vals[f.id] = f.type === 'checkbox' ? inp.checked : f.type === 'file' ? inp.files : f.type === 'number' ? moneyNum(inp.value) : f.type === 'range' ? Number(inp.value) : inp.value.trim();
         });
         const missing = fields.find((f) => f.required && !vals[f.id]);
         if (missing) { el.querySelector('#fm-err').textContent = `צריך למלא: ${missing.label}`; return; }
@@ -763,10 +765,10 @@ Pages['bo-new'] = (q) => { const L = leadFor(q) || {}; return (!isJorge() ? { ti
         <label class="field"><span>אדריכלית / מעצבת</span><input class="input" name="arch" list="team-names" value="${esc(L.designer || '')}"></label>
         <datalist id="team-names">${STAFF_PICK.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
         <label class="field"><span>סוג הפרויקט</span><select class="input" name="ptype">${PROJECT_TYPES.map((t) => `<option ${t === L.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
-        <label class="field"><span>סכום השיפוץ (₪) כולל מע"מ</span><input class="input" type="number" name="amount" inputmode="numeric" value="${esc(L.amount || '')}"></label>
+        <label class="field"><span>סכום השיפוץ (₪) כולל מע"מ</span><input class="input num" type="text" name="amount" inputmode="decimal" data-money value="${esc(moneyFmt(L.amount))}"></label>
         <label class="field"><span>תאריך התחלה</span><input class="input" type="date" name="start" value="${L.start_month ? L.start_month + '-01' : TODAY}"></label>
         <label class="field"><span>תאריך יעד</span><input class="input" type="date" name="end" value="${L.start_month && L.duration_months ? (() => { const [y, m] = L.start_month.split('-').map(Number); const d = new Date(y, m - 1 + Number(L.duration_months), 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; })() : ''}"></label>
-        <label class="field"><span>תקציב כולל של המשפחה (לא חובה)</span><input class="input" type="number" name="budget" inputmode="numeric"></label>
+        <label class="field"><span>תקציב כולל של המשפחה (לא חובה)</span><input class="input num" type="text" name="budget" inputmode="decimal" data-money></label>
         <label class="field"><span>תמונה ראשית</span><input class="input" type="file" name="img" accept="image/*"></label>
       </div>
       <label class="check"><input type="checkbox" name="invite" checked><span>לשלוח ללקוחות הזמנה לפתיחת משתמש</span></label>
@@ -810,10 +812,10 @@ async function createLiveProject(f) {
     .map(([k, role]) => ({ name: f.get(k) || '', role, email: /@/.test(f.get(k + 'c')) ? f.get(k + 'c').trim().toLowerCase() : '', phone: /@/.test(f.get(k + 'c')) ? '' : f.get(k + 'c'), status: 'הוזמן' }));
   const data = emptyProjectData({
     name: f.get('name'), family: f.get('family'), address: f.get('address') || '', start: f.get('start') || TODAY,
-    handover: f.get('end') || '', budget: Number(f.get('budget')) || 0, team, members, template: !!f.get('tpl'),
+    handover: f.get('end') || '', budget: moneyNum(f.get('budget')), team, members, template: !!f.get('tpl'),
   });
   data.project.type = f.get('ptype') || '';
-  data.project.contract = Number(f.get('amount')) || 0;
+  data.project.contract = moneyNum(f.get('amount'));
   const pid = await Live.createProject(data);
   await Live.open(pid);
   const img = f.get('img');

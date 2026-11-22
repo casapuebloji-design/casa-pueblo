@@ -245,6 +245,12 @@ function budgetTable(fm) {
     </tbody></table></div>`;
 }
 
+// Money fields accept the amount as written in a contract or invoice: 10,000 / 10000 / ₪10,000.
+function moneyNum(v) { return Number(String(v == null ? '' : v).replace(/[^\d.]/g, '')) || 0; }
+function moneyFmt(v) { return v ? Number(v).toLocaleString('en-US') : ''; }
+// Shows the commas once the field is left (10000 → 10,000).
+document.addEventListener('focusout', (e) => { if (e.target.matches && e.target.matches('input[data-money]')) e.target.value = moneyFmt(moneyNum(e.target.value)); });
+
 function expenseDetail(id) {
   const e = Store.data.expenses.find((x) => x.id === id);
   const paid = expensePaid(e);
@@ -295,13 +301,13 @@ function paymentForm(id) {
   openModal({
     title: `רישום תשלום · ${e.supplier}`,
     body: `
-      <label class="field"><span>סכום (₪)</span><input class="input num" id="pf-amt" type="number" inputmode="decimal" min="1" max="${left}" value="${left}"></label>
+      <label class="field"><span>סכום (₪)</span><input class="input num" id="pf-amt" type="text" inputmode="decimal" data-money value="${moneyFmt(left)}"></label>
       <label class="field"><span>תאריך</span><input class="input" id="pf-date" type="date" value="${TODAY}"></label>
       <p class="form-hint">יתרה לתשלום: ${ils(left)}</p>`,
     foot: `<button class="btn btn-primary" id="pf-save">${icon('check')}שמירה</button>`,
     onOpen(el) {
       el.querySelector('#pf-save').onclick = () => {
-        const amt = Math.min(Number(el.querySelector('#pf-amt').value) || 0, left);
+        const amt = Math.min(moneyNum(el.querySelector('#pf-amt').value), left);
         if (amt <= 0) return;
         e.payments.push({ date: el.querySelector('#pf-date').value || TODAY, amount: amt });
         Store.log(`רשם תשלום ${ils(amt)} ל${e.supplier}`);
@@ -322,8 +328,8 @@ function expenseForm() {
       <div class="form-grid two">
         <label class="field"><span>מה נקנה או הוזמן</span><input class="input" id="xf-item" placeholder="למשל: מטבח, וילונות לסלון"></label>
         <label class="field"><span>ספק / בעל מקצוע (לא חובה)</span><input class="input" id="xf-sup" placeholder="למשל: נגב קרמיקה" list="xf-sups"></label>
-        <label class="field"><span>עלות כוללת (₪)</span><input class="input num" type="number" inputmode="decimal" id="xf-total" min="0"></label>
-        <label class="field"><span>שולם עד עכשיו (₪)</span><input class="input num" type="number" inputmode="decimal" id="xf-paid" min="0" value="0"></label>
+        <label class="field"><span>עלות כוללת (₪)</span><input class="input num" type="text" inputmode="decimal" data-money id="xf-total"></label>
+        <label class="field"><span>שולם עד עכשיו (₪)</span><input class="input num" type="text" inputmode="decimal" data-money id="xf-paid" placeholder="0"></label>
         <label class="field"><span>קטגוריה</span><select class="input" id="xf-cat">${BUDGET_CATEGORIES.filter((c) => c !== 'ביצוע ושיפוץ').map((c) => `<option ${c === 'שונות' ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
         <label class="field"><span>חשבונית / הצעת מחיר (לא חובה)</span><input class="input" type="file" id="xf-file" accept="image/*,application/pdf"></label>
       </div>
@@ -348,8 +354,8 @@ function expenseForm() {
     onOpen(el) {
       const $ = (s) => el.querySelector(s);
       $('#xf-save').onclick = async (ev) => {
-        const total = Number($('#xf-total').value);
-        const paid = Number($('#xf-paid').value) || 0;
+        const total = moneyNum($('#xf-total').value);
+        const paid = moneyNum($('#xf-paid').value);
         const item = $('#xf-item').value.trim();
         const sup = $('#xf-sup').value.trim();
         const spaces = [...el.querySelectorAll('.chips-input input:checked')].map((i) => i.value);
