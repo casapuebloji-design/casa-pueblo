@@ -179,7 +179,7 @@ const PROJECT_ACTIONS = [
   ['material', 'materials', 'הוספת חומר ו/או מוצר'],
   ['photos', 'camera', 'העלאת תמונות'],
   ['doc', 'documents', 'העלאת מסמך'],
-  ['payment', 'finance', 'עדכון תשלום'],
+  ['payment', 'finance', 'תשלומים לפי ההסכם'],
   ['change', 'plus', 'שינוי / תוספת'],
   ['pro', 'pros', 'הוספת בעל מקצוע'],
   ['member', 'users', 'הזמנת משתמש לפרויקט'],
@@ -188,85 +188,93 @@ const PROJECT_ACTIONS = [
 // Back Office actions only Jorge sees (permissions questionnaire).
 const JORGE_ACTIONS = ['details', 'payment', 'change', 'member'];
 
-/* ---------- Payments to Casa Pueblo: the milestone plan from the contract, and recording each payment ---------- */
+/* ---------- Payments to Casa Pueblo: the payment plan from the signed contract ---------- */
+// Each payment: { name, when (the contract's wording, e.g. "בסיום שלד"), due (optional date), amount, paid (date|null), invoice }.
+// Payments are ticked as paid on the finance page; this editor sets up the plan itself.
 function milestones() { return Store.data.casaMilestones || (Store.data.casaMilestones = []); }
-const reopenPayments = () => setTimeout(paymentsModal, 0); // after the form closes, back to the list
 
-function paymentsModal() {
-  const ms = milestones();
-  const total = ms.reduce((s, m) => s + (Number(m.amount) || 0), 0);
-  const paid = ms.filter((m) => m.paid).reduce((s, m) => s + (Number(m.amount) || 0), 0);
+function paymentPlanEditor({ fromContract = false } = {}) {
+  const p = Store.data.project;
+  let rows = milestones().map((m) => ({ ...m }));
+  if (!rows.length) rows = [{}, {}, {}];
+  let contract = Number(p.contract) || rows.reduce((s, r) => s + (Number(r.amount) || 0), 0) || '';
+  const pctOf = (amt) => (contract && amt ? Math.round(amt / contract * 1000) / 10 : '');
+
+  const rowHtml = (r, i) => `
+    <div class="pp-row" data-i="${i}">
+      <label class="pp-f name"><span>תשלום ${i + 1}</span><input class="input" data-k="name" value="${esc(r.name || '')}" placeholder="למשל: מקדמה בחתימת ההסכם"></label>
+      <label class="pp-f when"><span>מתי (לפי ההסכם)</span><input class="input" data-k="when" value="${esc(r.when || '')}" placeholder="למשל: בסיום השלד"></label>
+      <label class="pp-f due"><span>תאריך (לא חובה)</span><input class="input" type="date" data-k="due" value="${esc(r.due || '')}"></label>
+      <label class="pp-f pct"><span>%</span><input class="input num" type="number" inputmode="decimal" step="0.1" data-k="pct" value="${pctOf(r.amount)}"></label>
+      <label class="pp-f amt"><span>סכום (₪)</span><input class="input num" type="number" inputmode="decimal" data-k="amount" value="${r.amount || ''}"></label>
+      <button class="icon-btn pp-del" data-del="${i}" aria-label="מחיקת תשלום ${i + 1}" title="מחיקה">${icon('close')}</button>
+      ${r.paid ? `<span class="pp-paid">${icon('check', 'xs')}שולם ${fmtDate(r.paid)}</span>` : ''}
+    </div>`;
+
   openModal({
-    title: 'תשלומים לקאסה פואבלו',
+    title: 'התשלומים לפי הסכם ההתקשרות',
     wide: true,
-    body: ms.length
-      ? `<p class="small ink-2" style="margin-top:0">סה״כ ${ils(total)} · שולם ${ils(paid)} · יתרה ${ils(total - paid)}</p>
-        <ul class="rows">${ms.map((m, i) => `<li class="row compact">
-          <div class="main-col"><div class="title">${esc(m.name)}</div><div class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice ? ` · ${esc(m.invoice)}` : ''}` : `לתשלום עד ${fmtDate(m.due)}`}</div></div>
-          <div class="end" style="gap:6px;flex-wrap:wrap"><b class="num small">${ils(m.amount)}</b>
-            ${m.paid ? pill('green', 'שולם') : `<button class="btn btn-sm btn-primary" data-pay="${i}">${icon('check')}רישום תשלום</button>`}
-            <button class="btn btn-sm btn-ghost" data-edit="${i}">עריכה</button></div></li>`).join('')}</ul>`
-      : '<div class="empty">עוד לא הוגדרו אבני דרך לתשלום. מוסיפים אותן לפי ההסכם, למשל: מקדמה בחתימה, סיום הריסה, סיום שלד, מסירה.</div>',
-    foot: `<button class="btn btn-primary" id="ms-add">${icon('plus')}הוספת אבן דרך לתשלום</button><button class="btn btn-ghost" data-close>סגירה</button>`,
+    body: `
+      ${fromContract ? '<p class="small" style="margin-top:0"><b>ההסכם נשמר במסמכים.</b> עכשיו רושמים כאן את התשלומים שמופיעים בו. כל תשלום יופיע ללקוח בנפרד בעמוד הכספים, עם ריבוע לסימון כשהוא משולם.</p>'
+        : '<p class="small ink-2" style="margin-top:0">כל תשלום מופיע ללקוח בנפרד בעמוד הכספים. אפשר לרשום אחוז מסכום ההסכם, והסכום יחושב לבד.</p>'}
+      <label class="field" style="max-width:280px"><span>סכום ההסכם (₪, כולל מע"מ)</span><input class="input num" type="number" inputmode="decimal" id="pp-contract" value="${contract}"></label>
+      <div id="pp-rows"></div>
+      <button class="link-btn" id="pp-add" style="margin-top:6px">${icon('plus')}הוספת תשלום</button>
+      <div class="pp-total" id="pp-total"></div>
+      <p class="form-hint" id="pp-err" style="color:var(--st-red)"></p>`,
+    foot: `<button class="btn btn-primary" id="pp-save">${icon('check')}שמירה</button><button class="btn btn-ghost" data-close>ביטול</button>`,
     onOpen(el) {
-      el.querySelector('#ms-add').onclick = () => { closeModal(); milestoneForm(null); };
-      el.querySelectorAll('[data-pay]').forEach((b) => (b.onclick = () => { closeModal(); payForm(ms[b.dataset.pay]); }));
-      el.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => { closeModal(); milestoneForm(ms[b.dataset.edit]); }));
-    },
-  });
-}
-
-function milestoneForm(m) {
-  formModal({
-    title: m ? `עריכה: ${m.name}` : 'אבן דרך חדשה לתשלום',
-    fields: [
-      { id: 'name', label: 'שם אבן הדרך', value: m && m.name, required: true, placeholder: 'למשל: מקדמה בחתימת הסכם' },
-      { id: 'amount', label: 'סכום (₪) כולל מע"מ', type: 'number', value: m ? m.amount : '', required: true },
-      { id: 'due', label: 'מועד לתשלום', type: 'date', value: m && m.due },
-      ...(m && m.paid ? [
-        { id: 'paid', label: 'תאריך התשלום', type: 'date', value: m.paid },
-        { id: 'invoice', label: 'מספר חשבונית / קבלה', value: m.invoice },
-        { id: 'unpay', label: 'ביטול הסימון "שולם"', type: 'checkbox' },
-      ] : []),
-      ...(m ? [{ id: 'remove', label: 'מחיקת אבן הדרך', type: 'checkbox' }] : []),
-    ],
-    onSave(v) {
-      const ms = milestones();
-      if (m && v.remove) {
-        ms.splice(ms.indexOf(m), 1);
-        Store.log(`מחק אבן דרך לתשלום: ${m.name}`, TEAM.pm.name);
-        Store.save(); reopenPayments();
-        return 'אבן הדרך נמחקה';
-      }
-      const row = m || {};
-      Object.assign(row, { name: v.name, amount: v.amount, due: v.due || '' });
-      if (m && m.paid) { if (v.unpay) { row.paid = null; row.invoice = ''; } else { row.paid = v.paid || m.paid; row.invoice = v.invoice; } }
-      if (!m) { row.paid = null; ms.push(row); }
-      ms.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
-      Store.log(`${m ? 'עדכן' : 'הוסיף'} אבן דרך לתשלום: ${v.name} ${ils(v.amount)}`, TEAM.pm.name);
-      Store.save(); reopenPayments();
-      return m ? 'אבן הדרך עודכנה' : 'אבן הדרך נוספה';
-    },
-  });
-}
-
-function payForm(m) {
-  formModal({
-    title: 'רישום תשלום מהלקוח',
-    intro: `<b>${esc(m.name)}</b> · ${ils(m.amount)}`,
-    fields: [
-      { id: 'date', label: 'תאריך תשלום', type: 'date', value: TODAY },
-      { id: 'invoice', label: 'מספר חשבונית / קבלה (לא חובה)' },
-    ],
-    submit: 'סימון כשולם',
-    onSave(v) {
-      m.paid = v.date || TODAY;
-      m.invoice = v.invoice;
-      const casa = (Store.data.expenses || []).find((e) => e.casa);
-      if (casa) casa.payments.push({ date: m.paid, amount: m.amount });
-      Store.log(`עדכן תשלום: ${m.name} ${ils(m.amount)}`, TEAM.pm.name);
-      Store.save(); reopenPayments();
-      return 'התשלום נרשם';
+      const box = el.querySelector('#pp-rows');
+      const collect = () => box.querySelectorAll('.pp-row').forEach((row) => {
+        const r = rows[row.dataset.i];
+        row.querySelectorAll('[data-k]').forEach((inp) => { if (inp.dataset.k !== 'pct') r[inp.dataset.k] = inp.dataset.k === 'amount' ? (Number(inp.value) || '') : inp.value.trim(); });
+      });
+      const total = () => {
+        const sum = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const diff = contract ? contract - sum : 0;
+        el.querySelector('#pp-total').innerHTML = `סה״כ התשלומים: <b class="num">${ils(sum)}</b>${contract && Math.abs(diff) >= 1
+          ? ` · <span style="color:var(--st-red)">${diff > 0 ? `חסרים ${ils(diff)}` : `עודף של ${ils(-diff)}`} מול סכום ההסכם</span>`
+          : contract ? ' · <span style="color:var(--st-green, #2e7d4f)">תואם לסכום ההסכם</span>' : ''}`;
+      };
+      const draw = () => {
+        box.innerHTML = rows.map(rowHtml).join('');
+        box.querySelectorAll('.pp-row').forEach((row) => {
+          const r = rows[row.dataset.i];
+          const pctIn = row.querySelector('[data-k="pct"]');
+          const amtIn = row.querySelector('[data-k="amount"]');
+          pctIn.oninput = () => { if (contract && pctIn.value !== '') { r.amount = Math.round(contract * Number(pctIn.value) / 100); amtIn.value = r.amount; } total(); };
+          amtIn.oninput = () => { r.amount = Number(amtIn.value) || ''; pctIn.value = pctOf(r.amount); total(); };
+        });
+        box.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => {
+          collect();
+          const r = rows[b.dataset.del];
+          if (r.paid && b.dataset.sure !== '1') { b.dataset.sure = '1'; toast('התשלום הזה כבר סומן כשולם. ללחוץ שוב כדי למחוק'); return; }
+          rows.splice(Number(b.dataset.del), 1);
+          draw();
+        }));
+        total();
+      };
+      el.querySelector('#pp-contract').oninput = (e) => {
+        collect();
+        contract = Number(e.target.value) || '';
+        box.querySelectorAll('.pp-row').forEach((row) => { row.querySelector('[data-k="pct"]').value = pctOf(rows[row.dataset.i].amount); });
+        total();
+      };
+      el.querySelector('#pp-add').onclick = () => { collect(); rows.push({}); draw(); box.querySelector('.pp-row:last-child [data-k="name"]').focus(); };
+      el.querySelector('#pp-save').onclick = () => {
+        collect();
+        const list = rows.filter((r) => r.name || r.amount || r.when || r.due);
+        const bad = list.findIndex((r) => !r.name || !(r.amount > 0));
+        if (bad >= 0) { el.querySelector('#pp-err').textContent = `בתשלום ${rows.indexOf(list[bad]) + 1} חסר ${list[bad].name ? 'סכום' : 'שם'}.`; return; }
+        Store.data.casaMilestones = list.map((r) => ({ name: r.name, when: r.when || '', due: r.due || '', amount: Number(r.amount), paid: r.paid || null, invoice: r.invoice || '' }));
+        p.contract = Number(contract) || list.reduce((s, r) => s + Number(r.amount), 0);
+        Store.log(`עדכן את התשלומים לפי ההסכם: ${list.length} תשלומים, ${ils(p.contract)}`, TEAM.pm.name);
+        Store.save();
+        closeModal();
+        toast(list.length ? `נשמרו ${list.length} תשלומים` : 'התשלומים נמחקו');
+        App.render();
+      };
+      draw();
     },
   });
 }
@@ -568,7 +576,7 @@ const ACTIONS = {
     });
   },
   doc() { uploadDocFlow(); },
-  payment() { paymentsModal(); },
+  payment() { paymentPlanEditor(); },
   change() {
     formModal({
       title: 'שינוי / תוספת לחוזה',
@@ -648,7 +656,7 @@ Pages['bo-project'] = () => {
         <div class="card stat"><div class="k">שלב</div><div class="v" style="font-size:20px">${esc(p.stage)}</div><div class="s">${p.progress}% התקדמות</div></div>
         <div class="card stat ${open.some((t) => t.level === 'red') ? 'alert' : ''}"><div class="k">ממתין ללקוח</div><div class="v">${open.length}</div><div class="s">${open.filter((t) => t.type === 'approval').length} אישורים</div></div>
         <div class="card stat"><div class="k">עדכון שבועי אחרון</div><div class="v" style="font-size:20px">${fmtDate(p.weekly.updated)}</div><div class="s">לפני ${daysBetween(p.weekly.updated, TODAY)} ימים</div></div>
-        <div class="card stat"><div class="k">ניצול תקציב המשפחה</div><div class="v">${pct(financeModel(d).util)}</div></div>
+        ${(() => { const cm = casaModel(d); return `<div class="card stat"><div class="k">שולם מההסכם</div><div class="v">${shareOf(cm.paid, cm.contract)}</div><div class="s">${ils(cm.paid)} מתוך ${ils(cm.contract)}</div></div>`; })()}
       </div>
       <div class="section-title"><h2>פעולות</h2></div>
       <div class="actions-grid">

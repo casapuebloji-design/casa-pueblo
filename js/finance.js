@@ -1,73 +1,172 @@
 /* כספים ותשלומים: A) settlement with Casa Pueblo, B) whole-house budget. */
 
 Pages.finance = (q) => {
-  const tab = ['casa', 'budget', 'expenses'].includes(q.tab) ? q.tab : 'casa';
-  const body = tab === 'casa' ? financeCasa() : tab === 'budget' ? financeBudget(q) : financeExpenses(q);
+  const hasBudget = Number(Store.data.project.budget) > 0;
+  const tabs = [['casa', 'תשלומים לקאסה פואבלו'], ['forecast', 'עלות הפרויקט כולו'], ...(hasBudget ? [['budget', 'תקציב הבית']] : [])];
+  const asked = q.tab === 'expenses' ? 'forecast' : q.tab; // old links
+  const tab = tabs.some(([k]) => k === asked) ? asked : 'casa';
+  const body = tab === 'casa' ? financeCasa() : tab === 'budget' ? financeBudget(q) : financeForecast(q);
   return {
     title: 'כספים ותשלומים',
     html: `
-      <div class="page-head"><div><h1>כספים ותקציב</h1><p>כל התמונה הכספית של הפרויקט במקום אחד</p></div>
+      <div class="page-head"><div><h1>כספים</h1><p>התשלומים לקאסה פואבלו ועלות הפרויקט כולו, במקום אחד</p></div>
         <button class="btn btn-accent" id="fx-add">${icon('plus')}הוספת הוצאה</button></div>
       <div class="tabs" role="tablist">
-        <button role="tab" aria-selected="${tab === 'casa'}" data-tab="casa">תשלומים לקאסה פואבלו</button>
-        <button role="tab" aria-selected="${tab === 'budget'}" data-tab="budget">תקציב הבית</button>
-        <button role="tab" aria-selected="${tab === 'expenses'}" data-tab="expenses">הוצאות ורכישות</button>
+        ${tabs.map(([k, label]) => `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${label}</button>`).join('')}
       </div>
       ${body}`,
     mount(root) {
       root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => App.go('finance', { tab: b.dataset.tab })));
-      root.querySelector('#fx-add').onclick = () => expenseForm();
+      root.querySelectorAll('#fx-add, #fx-add2').forEach((b) => (b.onclick = () => expenseForm()));
       root.querySelectorAll('[data-exp]').forEach((r) => (r.onclick = () => expenseDetail(r.dataset.exp)));
       root.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => App.go('finance', { ...q, tab, view: b.dataset.view })));
-      root.querySelectorAll('[data-fcat]').forEach((b) => (b.onclick = () => App.go('finance', { tab: 'expenses', cat: b.dataset.fcat })));
+      root.querySelectorAll('[data-fcat]').forEach((b) => (b.onclick = () => App.go('finance', { tab: 'forecast', cat: b.dataset.fcat })));
+      root.querySelectorAll('[data-paycheck]').forEach((b) => (b.onclick = () => togglePaid(b.dataset.paycheck)));
+      const plan = root.querySelector('#pp-edit');
+      if (plan) plan.onclick = () => paymentPlanEditor();
+      const doc = root.querySelector('#pp-doc');
+      if (doc) doc.onclick = () => { if (!openFile(doc.dataset.path)) App.go('documents'); };
       bindTips(root);
     },
   };
 };
 
+// Jorge manages the payments, also while looking at the page "as the client" (the finance page is a client page).
+function canManagePayments() { return !!(Store.session && Store.session.role === 'staff' && isJorge()); }
+
+// The V box next to each payment. Only Jorge can tick it; everyone else sees it read-only.
+function payCheck(key, paid) {
+  const can = canManagePayments();
+  const label = paid ? `שולם ${fmtDate(paid)}` : 'טרם שולם';
+  return can
+    ? `<button class="pay-check ${paid ? 'on' : ''}" data-paycheck="${key}" aria-pressed="${!!paid}" aria-label="${label}${paid ? '. לחיצה לביטול הסימון' : '. לחיצה לסימון כשולם'}">${paid ? icon('check') : ''}</button>`
+    : `<span class="pay-check ${paid ? 'on' : ''}" role="img" aria-label="${label}">${paid ? icon('check') : ''}</span>`;
+}
+
+function togglePaid(key) {
+  const [kind, id] = key.split(':');
+  const item = kind === 'm' ? (Store.data.casaMilestones || [])[Number(id)] : Store.data.changes.find((c) => c.id === id);
+  if (!item) return;
+  const name = kind === 'm' ? item.name : `תוספת #${item.no} – ${item.title}`;
+  const commit = (paid) => {
+    item.paid = paid;
+    if (!paid && kind === 'm') item.invoice = '';
+    Store.log(`${paid ? 'סימן כשולם' : 'ביטל סימון תשלום'}: ${name} ${ils(item.amount)}`, TEAM.pm.name);
+    Store.save();
+    toast(paid ? `${name} סומן כשולם` : 'הסימון בוטל');
+    App.render();
+  };
+  if (!item.paid) return commit(TODAY);
+  openModal({
+    title: 'ביטול הסימון "שולם"',
+    body: `<p style="margin-top:0"><b>${esc(name)}</b> · ${ils(item.amount)}</p><p class="ink-2">סומן כשולם ב־${fmtDate(item.paid)}. לבטל את הסימון?</p>`,
+    foot: `<button class="btn btn-primary" id="tp-yes">ביטול הסימון</button><button class="btn btn-ghost" data-close>השארה כשולם</button>`,
+    onOpen(el) { el.querySelector('#tp-yes').onclick = () => { closeModal(); commit(null); }; },
+  });
+}
+
 function financeCasa() {
   const d = Store.data;
   const cm = casaModel(d);
+  const jorge = canManagePayments();
+  const contractDoc = (d.documents || []).find((x) => x.cat === 'הסכם התקשרות');
+  const paidPct = cm.contract ? cm.paid / cm.contract * 100 : 0;
   return `
-    <div class="kpis five">
-      <div class="card stat"><div class="k">סה״כ התקשרות</div><div class="v num">${ils(cm.total)}</div><div class="s">כולל שינויים מאושרים ${ils(cm.approvedChanges)}</div></div>
-      <div class="card stat"><div class="k">שולם</div><div class="v num">${ils(cm.paid)}</div><div class="s">${pct(cm.total ? cm.paid / cm.total * 100 : 0, 0)} מההתקשרות</div></div>
-      <div class="card stat"><div class="k">יתרה לתשלום</div><div class="v num">${ils(cm.left)}</div><div class="s">${cm.ms.filter((m) => !m.paid).length} אבני דרך פתוחות</div></div>
-      <div class="card stat accent"><div class="k">התשלום הבא</div><div class="v num">${cm.next ? ils(cm.next.amount) : '—'}</div><div class="s">${cm.next ? esc(cm.next.name) : ''}</div></div>
-      <div class="card stat"><div class="k">מועד התשלום הבא</div><div class="v">${cm.next ? fmtDate(cm.next.due) : '—'}</div><div class="s">${cm.next ? `בעוד ${daysBetween(TODAY, cm.next.due)} ימים` : ''}</div></div>
+    <div class="kpis four">
+      <div class="card stat"><div class="k">סה״כ הפרויקט</div><div class="v num">${ils(cm.grand)}</div><div class="s">הסכם ${ils(cm.contract)}${cm.addTotal ? ` + תוספות ${ils(cm.addTotal)}` : ''}</div></div>
+      <div class="card stat"><div class="k">שולם עד עכשיו</div><div class="v num">${ils(cm.paid)}</div><div class="s">${shareOf(cm.paid, cm.contract)} מההסכם</div></div>
+      <div class="card stat"><div class="k">יתרה לתשלום</div><div class="v num">${ils(cm.left)}</div><div class="s">${shareOf(cm.left, cm.contract)} מההסכם</div></div>
+      <div class="card stat accent"><div class="k">התשלום הבא</div><div class="v num">${cm.next ? ils(cm.next.amount) : '—'}</div><div class="s">${cm.next ? esc([cm.next.name, payWhen(cm.next)].filter(Boolean).join(' · ')) : cm.ms.length ? 'כל התשלומים שולמו' : ''}</div></div>
     </div>
 
     <div class="grid wide-left" style="margin-top:14px">
       <article class="card card-pad">
-        <div class="card-head"><h3>אבני דרך לתשלום</h3><span class="small muted">${cm.ms.filter((m) => m.paid).length} מתוך ${cm.ms.length} שולמו</span></div>
-        <div class="progress dark terra" style="margin-bottom:6px"><i style="width:${(cm.total ? cm.paid / cm.total * 100 : 0).toFixed(1)}%"></i></div>
-        <ul class="milestones">
-          ${cm.ms.map((m) => `
-            <li class="${m.paid ? 'paid' : m === cm.next ? 'next' : ''}">
-              <span class="mk">${m.paid ? icon('check') : ''}</span>
-              <div><b>${esc(m.name)}</b><div class="small muted">${m.paid ? `שולם ${fmtDate(m.paid)} · ${esc(m.invoice)}` : `לתשלום עד ${fmtDate(m.due)}`}</div></div>
-              <div class="num" style="font-weight:700">${ils(m.amount)}</div>
+        <div class="card-head"><h3>התשלומים לפי ההסכם</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${contractDoc ? `<button class="link-btn small" id="pp-doc" data-path="${esc(contractDoc.path || '')}">${icon('documents', 'xs')}הסכם ההתקשרות</button>` : ''}
+            ${jorge ? `<button class="btn btn-sm btn-ghost" id="pp-edit">${icon('edit', 'xs')}עריכת התשלומים</button>` : ''}
+          </div></div>
+        ${cm.ms.length ? `
+          <div class="split small ink-2" style="margin-bottom:6px"><span>${cm.ms.filter((m) => m.paid).length} מתוך ${cm.ms.length} תשלומים שולמו</span><b class="num">${pct(paidPct, 0)}</b></div>
+          <div class="progress dark terra" style="margin-bottom:10px"><i style="width:${Math.min(paidPct, 100).toFixed(1)}%"></i></div>
+          <ul class="pay-list">
+            ${cm.ms.map((m, i) => `<li class="${m.paid ? 'paid' : m === cm.next ? 'next' : ''}">
+              ${payCheck(`m:${i}`, m.paid)}
+              <div class="pl-main"><b>${esc(m.name)}</b><span class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice ? ` · ${esc(m.invoice)}` : ''}` : esc(payWhen(m))}</span></div>
+              <div class="pl-amt"><b class="num">${ils(m.amount)}</b><span class="sub">${shareOf(m.amount, cm.contract)}</span></div>
             </li>`).join('')}
-        </ul>
+            <li class="total"><span></span><div class="pl-main"><b>סה״כ ההסכם</b></div><div class="pl-amt"><b class="num">${ils(cm.contract)}</b></div></li>
+          </ul>
+          ${jorge ? '<p class="form-hint">לוחצים על הריבוע כדי לסמן תשלום שהתקבל. הלקוח רואה את הסימון, אבל לא יכול לשנות אותו.</p>' : ''}`
+        : `<div class="empty">${jorge
+          ? 'עוד לא הוזנו התשלומים מההסכם. מעלים את ההסכם ב"מסמכים" בקטגוריה "הסכם התקשרות", או לוחצים "עריכת התשלומים".'
+          : 'כאן יופיעו התשלומים לפי הסכם ההתקשרות, ברגע שקאסה פואבלו תזין אותם.'}</div>`}
       </article>
-      <div class="stack">
-        <article class="card">
-          <div class="card-pad" style="padding-bottom:4px"><h3>חשבוניות, קבלות ואסמכתאות</h3></div>
-          <ul class="rows">
-            ${cm.ms.filter((m) => m.paid).slice().reverse().map((m) => `<li class="row compact">${fileIco('PDF')}
-              <div class="main-col"><div class="title">${esc(m.invoice)}</div><div class="sub">${esc(m.name)} · ${fmtDate(m.paid)}</div></div>
-              <div class="end"><b class="num small">${ils(m.amount)}</b></div></li>`).join('')}
-          </ul>
-        </article>
-        <article class="card">
-          <div class="card-pad" style="padding-bottom:4px"><h3>שינויים ותוספות</h3></div>
-          <ul class="rows">
-            ${d.changes.map((c) => `<li class="row compact"><div class="main-col"><div class="title">#${c.no} ${esc(c.title)}</div><div class="sub">${fmtDate(c.date)}</div></div>
-              <div class="end"><span class="num small">${ils(c.amount)} כולל מע"מ</span>${c.status === 'approved' ? pill('green', 'אושר') : pill('yellow', 'ממתין')}</div></li>`).join('')}
-          </ul>
-        </article>
-      </div>
+
+      <article class="card card-pad">
+        <div class="card-head"><h3>תוספות ושינויים</h3></div>
+        ${cm.adds.length ? `
+          <dl class="pay-sum">
+            <div><dt>סה״כ תוספות</dt><dd class="num">${ils(cm.addTotal)}</dd></div>
+            <div><dt>שולם</dt><dd class="num">${ils(cm.addPaid)} <span>${shareOf(cm.addPaid, cm.addTotal)}</span></dd></div>
+            <div><dt>יתרה</dt><dd class="num">${ils(cm.addLeft)} <span>${shareOf(cm.addLeft, cm.addTotal)}</span></dd></div>
+          </dl>` : ''}
+        ${cm.adds.length || cm.pending.length ? `<ul class="pay-list">
+          ${cm.adds.map((c) => `<li class="${c.paid ? 'paid' : ''}">
+            ${payCheck(`c:${c.id}`, c.paid)}
+            <div class="pl-main"><b>#${c.no} ${esc(c.title)}</b><span class="sub">${c.paid ? `שולם ${fmtDate(c.paid)}` : `אושר · ${fmtDate(c.date)}`}</span></div>
+            <div class="pl-amt"><b class="num">${ils(c.amount)}</b><span class="sub">כולל מע"מ</span></div>
+          </li>`).join('')}
+          ${cm.pending.map((c) => `<li class="pending">
+            <span class="pay-check muted" aria-hidden="true"></span>
+            <div class="pl-main"><b>#${c.no} ${esc(c.title)}</b><span class="sub">ממתין לאישור הלקוח · ${fmtDate(c.date)}</span></div>
+            <div class="pl-amt"><b class="num">${ils(c.amount)}</b>${pill('yellow', 'ממתין')}</div>
+          </li>`).join('')}
+        </ul>
+        <p class="form-hint">תוספת נכנסת לסה״כ הפרויקט רק אחרי שהלקוח מאשר אותה.</p>` : '<div class="empty">אין תוספות או שינויים</div>'}
+      </article>
     </div>`;
+}
+
+// The whole project: what Casa Pueblo costs plus everything else the family pays for.
+function financeForecast(q) {
+  const f = forecastModel(Store.data);
+  const cat = q.cat || 'הכול';
+  const cats = [...new Set(f.others.map((e) => e.cat))];
+  const list = f.others.filter((e) => cat === 'הכול' || e.cat === cat).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const w = (v) => (f.grand ? v / f.grand * 100 : 0).toFixed(2) + '%';
+  return `
+    <div class="kpis four">
+      <div class="card stat accent"><div class="k">תחזית לעלות הפרויקט כולו</div><div class="v num">${ils(f.grand)}</div><div class="s">קאסה פואבלו + הוצאות נוספות</div></div>
+      <div class="card stat"><div class="k">קאסה פואבלו</div><div class="v num">${ils(f.cm.grand)}</div><div class="s">הסכם${f.cm.addTotal ? ' ותוספות' : ''}</div></div>
+      <div class="card stat"><div class="k">הוצאות נוספות</div><div class="v num">${ils(f.oTotal)}</div><div class="s">${f.others.length ? `${f.others.length} הוצאות` : 'עוד לא נוספו'}</div></div>
+      <div class="card stat"><div class="k">שולם עד עכשיו</div><div class="v num">${ils(f.paidAll)}</div><div class="s">${shareOf(f.paidAll, f.grand)} מהתחזית · יתרה ${ils(f.leftAll)}</div></div>
+    </div>
+
+    ${f.grand ? `<article class="card card-pad" style="margin-top:14px">
+      <div class="card-head"><h3>ממה מורכבת העלות</h3></div>
+      <div class="meter" role="img" aria-label="קאסה פואבלו ${ils(f.cm.grand)}, הוצאות נוספות ${ils(f.oTotal)}">
+        <i style="width:${w(f.cm.grand)};background:var(--c-commit)" data-tip="${esc(`<b>קאסה פואבלו</b>${ils(f.cm.grand)}`)}"></i>
+        <i style="width:${w(f.oTotal)};background:var(--c-paid)" data-tip="${esc(`<b>הוצאות נוספות</b>${ils(f.oTotal)}`)}"></i>
+      </div>
+      <div class="meter-legend">
+        <span><i class="sw" style="background:var(--c-commit)"></i>קאסה פואבלו · <b class="num">${ils(f.cm.grand)}</b> (${shareOf(f.cm.grand, f.grand)})</span>
+        <span><i class="sw" style="background:var(--c-paid)"></i>הוצאות נוספות · <b class="num">${ils(f.oTotal)}</b> (${shareOf(f.oTotal, f.grand)})</span>
+      </div>
+    </article>` : ''}
+
+    <article class="card card-pad" style="margin-top:14px">
+      <div class="card-head"><h3>הוצאות נוספות</h3><button class="btn btn-sm btn-primary" id="fx-add2">${icon('plus')}הוספת הוצאה</button></div>
+      <p class="form-hint" style="margin-top:0">הוצאות של הבית שאינן חלק מהעבודה של קאסה פואבלו, למשל מטבח, ריהוט, תאורה, מיזוג או אגרות. כל הוצאה שמוסיפים נכנסת לתחזית.</p>
+      ${cats.length > 1 ? `<div class="chips" role="group" aria-label="סינון לפי קטגוריה">
+        ${['הכול', ...cats].map((c) => `<button class="chip" aria-pressed="${c === cat}" data-fcat="${esc(c)}">${esc(c === 'הכול' ? 'הכל' : c)}</button>`).join('')}
+      </div>` : ''}
+      ${list.length ? `<ul class="rows">
+        ${list.map((e) => `<li class="row clickable compact" data-exp="${e.id}">
+          <div class="main-col"><div class="title">${esc(e.item)}${e.supplier ? ` · ${esc(e.supplier)}` : ''}</div><div class="sub">${esc(e.cat)}${e.paid ? ` · שולם ${ils(e.paid)}` : ''}${e.remaining > 0 && e.paid ? ` · יתרה ${ils(e.remaining)}` : ''}</div></div>
+          <div class="end"><b class="num small">${ils(e.total)}</b>${e.remaining <= 0 ? pill('green', 'שולם') : ''}</div></li>`).join('')}
+      </ul>` : '<div class="empty">עוד לא נוספו הוצאות. לוחצים "הוספת הוצאה" ורושמים מה נקנה או הוזמן וכמה זה עולה.</div>'}
+    </article>`;
 }
 
 function financeBudget(q) {
@@ -146,32 +245,6 @@ function budgetTable(fm) {
     </tbody></table></div>`;
 }
 
-function financeExpenses(q) {
-  const fm = financeModel(Store.data);
-  const cat = q.cat || 'הכול';
-  const cats = ['הכול', ...fm.cats.filter((c) => c.count).map((c) => c.name)];
-  const list = fm.exps.filter((e) => cat === 'הכול' || e.cat === cat).sort((a, b) => b.date.localeCompare(a.date));
-  const sum = list.reduce((a, e) => ({ total: a.total + e.total, paid: a.paid + e.paid }), { total: 0, paid: 0 });
-  return `
-    <div class="chips" role="group" aria-label="סינון לפי קטגוריה">
-      ${cats.map((c) => `<button class="chip" aria-pressed="${c === cat}" data-fcat="${esc(c)}">${esc(c)}</button>`).join('')}
-    </div>
-    <article class="card">
-      <div class="table-wrap"><table class="t">
-        <thead><tr><th>תאריך</th><th>ספק</th><th>פריט</th><th>קטגוריה</th><th>חללים</th><th class="n">עלות</th><th class="n">שולם</th><th class="n">יתרה</th><th>סטטוס</th></tr></thead>
-        <tbody>
-          ${list.map((e) => `<tr class="clickable" data-exp="${e.id}">
-            <td class="num">${fmtDate(e.date)}</td><td>${esc(e.supplier)}</td><td>${esc(e.item)}</td><td>${esc(e.cat)}</td>
-            <td class="small">${e.spaces.map(esc).join(', ')}</td>
-            <td class="n">${ils(e.total)}</td><td class="n">${ils(e.paid)}</td><td class="n">${ils(e.remaining)}</td>
-            <td>${matPill(e.status)}</td></tr>`).join('')}
-          <tr class="total"><td colspan="5">סה״כ ${list.length} הוצאות</td><td class="n">${ils(sum.total)}</td><td class="n">${ils(sum.paid)}</td><td class="n">${ils(sum.total - sum.paid)}</td><td></td></tr>
-        </tbody>
-      </table></div>
-    </article>
-    <p class="small muted">כל הוצאה נשמרת פעם אחת ומופיעה גם בחומרים, בבעלי המקצוע ובמסמכים, כך שלא צריך להזין אותה ארבע פעמים.</p>`;
-}
-
 function expenseDetail(id) {
   const e = Store.data.expenses.find((x) => x.id === id);
   const paid = expensePaid(e);
@@ -197,10 +270,21 @@ function expenseDetail(id) {
         <div class="small">ספקים ← ${esc(e.supplier)}</div>
         ${docs.length ? `<div class="small">מסמכים ← ${docs.map((x) => esc(x.cat)).join(', ')}</div>` : ''}
       </div>`,
-    foot: e.total > paid ? `<button class="btn btn-primary" id="ex-pay">${icon('plus')}רישום תשלום</button>` : '',
+    foot: `${e.total > paid ? `<button class="btn btn-primary" id="ex-pay">${icon('plus')}רישום תשלום</button>` : ''}
+      ${e.casa ? '' : '<button class="btn btn-ghost" id="ex-del" style="margin-inline-start:auto">מחיקת ההוצאה</button>'}`,
     onOpen(el) {
       const b = el.querySelector('#ex-pay');
       if (b) b.onclick = () => { closeModal(); paymentForm(e.id); };
+      const del = el.querySelector('#ex-del');
+      if (del) del.onclick = () => {
+        if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'ללחוץ שוב למחיקה'; return; }
+        Store.data.expenses = Store.data.expenses.filter((x) => x.id !== e.id);
+        Store.log(`מחק הוצאה: ${e.item} (${ils(e.total)})`);
+        Store.save();
+        closeModal();
+        toast('ההוצאה נמחקה');
+        App.render();
+      };
     },
   });
 }
@@ -232,30 +316,33 @@ function paymentForm(id) {
 
 function expenseForm() {
   openModal({
-    title: 'הוספת הוצאה / רכישה',
+    title: 'הוספת הוצאה',
     body: `
-      <div class="card card-pad" style="background:var(--sand);box-shadow:none;margin-bottom:14px;display:flex;gap:10px;align-items:center">
-        ${icon('camera')}<div class="small">אפשר לצרף חשבונית, קבלה, הצעת מחיר או אישור הזמנה.<br><span class="muted">בשלב 2 המערכת תקרא את המסמך ותמלא את השדות לבד (OCR/AI).</span></div>
-      </div>
-      <label class="field"><span>מסמך מצורף</span><input class="input" type="file" id="xf-file" accept="image/*,application/pdf"></label>
+      <p class="small ink-2" style="margin-top:0">הוצאה של הבית שאינה חלק מהעבודה של קאסה פואבלו, למשל מטבח, ריהוט או תאורה. היא תיכנס לתחזית של עלות הפרויקט כולו.</p>
       <div class="form-grid two">
-        <label class="field"><span>תאריך</span><input class="input" type="date" id="xf-date" value="${TODAY}"></label>
-        <label class="field"><span>ספק</span><input class="input" id="xf-sup" placeholder="למשל: נגב קרמיקה" list="xf-sups"></label>
-        <label class="field"><span>פריט</span><input class="input" id="xf-item" placeholder="למשל: וילונות לסלון"></label>
-        <label class="field"><span>קטגוריה</span><select class="input" id="xf-cat">${BUDGET_CATEGORIES.map((c) => `<option>${c}</option>`).join('')}</select></label>
-        <label class="field"><span>יצרן / מותג</span><input class="input" id="xf-maker"></label>
-        <label class="field"><span>דגם / מק״ט</span><input class="input" id="xf-model"></label>
+        <label class="field"><span>מה נקנה או הוזמן</span><input class="input" id="xf-item" placeholder="למשל: מטבח, וילונות לסלון"></label>
+        <label class="field"><span>ספק / בעל מקצוע (לא חובה)</span><input class="input" id="xf-sup" placeholder="למשל: נגב קרמיקה" list="xf-sups"></label>
         <label class="field"><span>עלות כוללת (₪)</span><input class="input num" type="number" inputmode="decimal" id="xf-total" min="0"></label>
-        <label class="field"><span>שולם בפועל (₪)</span><input class="input num" type="number" inputmode="decimal" id="xf-paid" min="0" value="0"></label>
-        <label class="field"><span>סטטוס</span><select class="input" id="xf-status"><option>הוזמן</option><option>בייצור</option><option>סופק</option><option>הותקן</option><option>הצעת מחיר</option></select></label>
-        <label class="field"><span>אמצעי תשלום</span><select class="input" id="xf-method"><option>אשראי</option><option>העברה בנקאית</option><option>צ׳ק</option><option>מזומן</option></select></label>
-        <label class="field"><span>מועד תשלום הבא</span><input class="input" type="date" id="xf-next"></label>
+        <label class="field"><span>שולם עד עכשיו (₪)</span><input class="input num" type="number" inputmode="decimal" id="xf-paid" min="0" value="0"></label>
+        <label class="field"><span>קטגוריה</span><select class="input" id="xf-cat">${BUDGET_CATEGORIES.filter((c) => c !== 'ביצוע ושיפוץ').map((c) => `<option ${c === 'שונות' ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+        <label class="field"><span>חשבונית / הצעת מחיר (לא חובה)</span><input class="input" type="file" id="xf-file" accept="image/*,application/pdf"></label>
       </div>
-      <div class="field"><span style="display:block;font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:6px">שיוך לחללים (אפשר לבחור כמה)</span>
-        <div class="chips-input">${SPACES.map((s) => `<label><input type="checkbox" value="${esc(s)}"><span>${esc(s)}</span></label>`).join('')}</div></div>
-      <label class="field"><span>הערות</span><input class="input" id="xf-notes" placeholder="למשל: כולל הובלה"></label>
-      <label class="check"><input type="checkbox" id="xf-mat" checked><span>להוסיף גם ל"חומרים ובחירות"</span></label>
-      <datalist id="xf-sups">${[...new Set(Store.data.expenses.map((e) => e.supplier))].map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+      <details class="more-fields">
+        <summary>פרטים נוספים (לא חובה)</summary>
+        <div class="form-grid two">
+          <label class="field"><span>תאריך</span><input class="input" type="date" id="xf-date" value="${TODAY}"></label>
+          <label class="field"><span>מועד תשלום הבא</span><input class="input" type="date" id="xf-next"></label>
+          <label class="field"><span>יצרן / מותג</span><input class="input" id="xf-maker"></label>
+          <label class="field"><span>דגם / מק״ט</span><input class="input" id="xf-model"></label>
+          <label class="field"><span>סטטוס</span><select class="input" id="xf-status"><option>הוזמן</option><option>בייצור</option><option>סופק</option><option>הותקן</option><option>הצעת מחיר</option></select></label>
+          <label class="field"><span>אמצעי תשלום</span><select class="input" id="xf-method"><option>אשראי</option><option>העברה בנקאית</option><option>צ׳ק</option><option>מזומן</option></select></label>
+        </div>
+        <div class="field"><span style="display:block;font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:6px">שיוך לחללים (אפשר לבחור כמה)</span>
+          <div class="chips-input">${SPACES.map((s) => `<label><input type="checkbox" value="${esc(s)}"><span>${esc(s)}</span></label>`).join('')}</div></div>
+        <label class="field"><span>הערות</span><input class="input" id="xf-notes" placeholder="למשל: כולל הובלה"></label>
+        <label class="check"><input type="checkbox" id="xf-mat"><span>להוסיף גם ל"חומרים ובחירות"</span></label>
+      </details>
+      <datalist id="xf-sups">${[...new Set(Store.data.expenses.map((e) => e.supplier).filter(Boolean))].map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
       <p class="form-hint" id="xf-err" style="color:var(--st-red)"></p>`,
     foot: `<button class="btn btn-primary" id="xf-save">${icon('check')}שמירת ההוצאה</button>`,
     onOpen(el) {
@@ -266,7 +353,7 @@ function expenseForm() {
         const item = $('#xf-item').value.trim();
         const sup = $('#xf-sup').value.trim();
         const spaces = [...el.querySelectorAll('.chips-input input:checked')].map((i) => i.value);
-        if (!item || !sup || !(total > 0)) { $('#xf-err').textContent = 'צריך למלא ספק, פריט ועלות כוללת.'; return; }
+        if (!item || !(total > 0)) { $('#xf-err').textContent = 'צריך למלא מה נקנה ואת העלות הכוללת.'; return; }
         if (paid > total) { $('#xf-err').textContent = 'הסכום ששולם גבוה מהעלות הכוללת.'; return; }
         ev.target.disabled = true;
         let path = '';
@@ -285,14 +372,14 @@ function expenseForm() {
           exp.material = mid;
         }
         if ($('#xf-file').files[0]) {
-          Store.data.documents.unshift({ id: 'd' + Date.now(), cat: 'חשבוניות', title: `${sup} – ${item}`, date: exp.date, type: ($('#xf-file').files[0].name.split('.').pop() || 'PDF').toUpperCase().slice(0, 4), size: ($('#xf-file').files[0].size / 1048576).toFixed(1) + 'MB', expense: id, path });
+          Store.data.documents.unshift({ id: 'd' + Date.now(), cat: 'חשבוניות', title: sup ? `${sup} – ${item}` : item, date: exp.date, type: ($('#xf-file').files[0].name.split('.').pop() || 'PDF').toUpperCase().slice(0, 4), size: ($('#xf-file').files[0].size / 1048576).toFixed(1) + 'MB', expense: id, path });
         }
         Store.data.expenses.push(exp);
-        Store.log(`הוסיף הוצאה: ${sup} – ${item} (${ils(total)})`);
+        Store.log(`הוסיף הוצאה: ${sup ? sup + ' – ' : ''}${item} (${ils(total)})`);
         Store.save();
         closeModal();
-        toast('ההוצאה נשמרה, והתקציב עודכן');
-        App.go('finance', { tab: 'expenses' });
+        toast('ההוצאה נשמרה ונכנסה לתחזית');
+        App.go('finance', { tab: 'forecast' });
       };
     },
   });

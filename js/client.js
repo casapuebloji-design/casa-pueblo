@@ -60,17 +60,16 @@ function approveChangeFlow(changeId) {
         <dt>תאריך בקשה</dt><dd>${fmtDate(c.date)}</dd>
         <dt>השפעה על לו״ז</dt><dd>ללא שינוי במועד המסירה</dd>
       </dl>
-      <p class="ink-2">אחרי האישור, השינוי יתווסף להסכם, ייכנס לתקציב בקטגוריית "ביצוע ושיפוץ" ויועבר לביצוע.</p>`,
+      <p class="ink-2">אחרי האישור, השינוי יתווסף כתוספת להסכם, ייכנס לסה״כ הפרויקט בעמוד הכספים ויועבר לביצוע.</p>`,
     foot: `<button class="btn btn-primary" id="ch-yes">${icon('check')}מאשר/ת את השינוי</button><button class="btn btn-ghost" data-close>לא עכשיו</button>`,
     onOpen(el) {
       el.querySelector('#ch-yes').onclick = () => {
         c.status = 'approved';
         completeTaskFor(c.id);
-        // A new project may have no contract row or payment plan yet.
+        // Additions are tracked on their own (finance page), not folded into the contract payments.
+        // The demo's budget keeps a Casa Pueblo expense row, which grows with each approved addition.
         const contract = (Store.data.expenses || []).find((e) => e.casa);
         if (contract) contract.total += c.amount;
-        const ms = Store.data.casaMilestones || [];
-        if (ms.length) ms[ms.length - 1].amount += c.amount;
         Store.log(`אישר את שינוי #${c.no} – ${c.title} (${ils(c.amount)} כולל מע"מ)`);
         Store.notify(`התוספת שאישרת (${c.title}) הועברה לביצוע`, 'documents');
         Store.save();
@@ -247,13 +246,18 @@ Pages.home = () => {
           <a class="next-pay" href="#/finance" style="text-decoration:none">
             <span class="k">התשלום הבא לקאסה פואבלו</span>
             <span class="v num">${cm.next ? ils(cm.next.amount) : '—'}</span>
-            <span class="d">${cm.next ? `${esc(cm.next.name)} · ${fmtDate(cm.next.due)}` : 'כל התשלומים הוסדרו'}</span>
+            <span class="d">${cm.next ? esc([cm.next.name, payWhen(cm.next)].filter(Boolean).join(' · ')) : cm.ms.length ? 'כל התשלומים הוסדרו' : 'התשלומים יופיעו לפי ההסכם'}</span>
           </a>
-          <article class="card card-pad">
+          ${fm.budget > 0 ? `<article class="card card-pad">
             <div class="card-head"><h3>תקציב הבית</h3><a class="link-btn small" href="#/finance?tab=budget">לפירוט</a></div>
             <div class="split small ink-2" style="margin-bottom:10px"><span>ניצול תקציב</span><b class="num" style="color:var(--ink)">${pct(fm.util)}</b></div>
             ${budgetMeter(fm)}
-          </article>
+          </article>` : (() => { const f = forecastModel(d); return `<article class="card card-pad">
+            <div class="card-head"><h3>עלות הפרויקט כולו</h3><a class="link-btn small" href="#/finance?tab=forecast">לפירוט</a></div>
+            <div class="split small ink-2" style="margin-bottom:6px"><span>תחזית</span><b class="num" style="color:var(--ink)">${ils(f.grand)}</b></div>
+            <div class="split small ink-2" style="margin-bottom:10px"><span>שולם עד עכשיו</span><b class="num" style="color:var(--ink)">${ils(f.paidAll)} · ${shareOf(f.paidAll, f.grand)}</b></div>
+            <div class="progress dark terra"><i style="width:${(f.grand ? Math.min(f.paidAll / f.grand * 100, 100) : 0).toFixed(1)}%"></i></div>
+          </article>`; })()}
         </div>
       </div>
 
@@ -1005,12 +1009,15 @@ function uploadDocFlow() {
         try { path = await storeFile(f); } catch (e) { ev.target.disabled = false; return; }
         const title = el.querySelector('#ud-title').value.trim() || (f && f.name) || 'מסמך חדש';
         const ext = f ? (f.name.split('.').pop() || 'PDF').toUpperCase().slice(0, 4) : 'PDF';
-        Store.data.documents.unshift({ id: 'd' + Date.now(), cat: el.querySelector('#ud-cat').value, title, date: TODAY, type: ext, size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—', path });
+        const cat = el.querySelector('#ud-cat').value;
+        Store.data.documents.unshift({ id: 'd' + Date.now(), cat, title, date: TODAY, type: ext, size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—', path });
         Store.log(`העלה מסמך: ${title}`);
         Store.save();
         closeModal();
-        toast('המסמך נשמר');
         App.render();
+        // A new engagement agreement: go straight on to entering its payments.
+        if (cat === 'הסכם התקשרות' && isJorge() && typeof paymentPlanEditor === 'function') setTimeout(() => paymentPlanEditor({ fromContract: true }), 0);
+        else toast('המסמך נשמר');
       };
     },
   });
