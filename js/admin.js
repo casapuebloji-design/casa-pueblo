@@ -205,7 +205,8 @@ function paymentPlanEditor({ fromContract = false } = {}) {
 
   const rowHtml = (r, i) => `
     <div class="pp-row" data-i="${i}">
-      <label class="pp-f name"><span>תשלום ${i + 1}</span><input class="input" data-k="name" value="${esc(r.name || '')}" placeholder="למשל: מקדמה בחתימת ההסכם"></label>
+      <div class="pp-no">תשלום ${i + 1}</div>
+      <label class="pp-f name"><span>תיאור התשלום</span><input class="input" data-k="name" value="${esc(r.name || '')}" placeholder="למשל: מקדמה"></label>
       <label class="pp-f when"><span>מתי (לפי ההסכם)</span><input class="input" data-k="when" value="${esc(r.when || '')}" placeholder="למשל: בסיום השלד"></label>
       <label class="pp-f due"><span>תאריך (לא חובה)</span><input class="input" type="date" data-k="due" value="${esc(r.due || '')}"></label>
       <label class="pp-f pct"><span>%</span><input class="input num" type="text" inputmode="decimal" data-k="pct" value="${pctOf(r.amount)}"></label>
@@ -223,9 +224,9 @@ function paymentPlanEditor({ fromContract = false } = {}) {
       <label class="field" style="max-width:280px"><span>סכום ההסכם (₪, כולל מע"מ)</span><input class="input num" type="text" inputmode="decimal" id="pp-contract" value="${fmtNum(contract)}"></label>
       <div id="pp-rows"></div>
       <button class="link-btn" id="pp-add" style="margin-top:6px">${icon('plus')}הוספת תשלום</button>
-      <div class="pp-total" id="pp-total"></div>
-      <p class="form-hint" id="pp-err" style="color:var(--st-red)"></p>`,
-    foot: `<button class="btn btn-primary" id="pp-save">${icon('check')}שמירה</button><button class="btn btn-ghost" data-close>ביטול</button>`,
+      <div class="pp-total" id="pp-total"></div>`,
+    // The message sits next to the save button, so it is seen even when the list is long.
+    foot: `<button class="btn btn-primary" id="pp-save">${icon('check')}שמירה</button><button class="btn btn-ghost" data-close>ביטול</button><span class="pp-err" id="pp-err" role="alert"></span>`,
     onOpen(el) {
       const box = el.querySelector('#pp-rows');
       const collect = () => box.querySelectorAll('.pp-row').forEach((row) => {
@@ -247,6 +248,7 @@ function paymentPlanEditor({ fromContract = false } = {}) {
           const amtIn = row.querySelector('[data-k="amount"]');
           pctIn.oninput = () => { if (contract && toNum(pctIn.value) !== '') { r.amount = Math.round(contract * toNum(pctIn.value) / 100); amtIn.value = fmtNum(r.amount); } total(); };
           amtIn.oninput = () => { r.amount = toNum(amtIn.value); pctIn.value = pctOf(r.amount); total(); };
+          amtIn.onblur = () => { amtIn.value = fmtNum(toNum(amtIn.value)); }; // 450000 → 450,000, as in the contract
         });
         box.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => {
           collect();
@@ -263,25 +265,27 @@ function paymentPlanEditor({ fromContract = false } = {}) {
         box.querySelectorAll('.pp-row').forEach((row) => { row.querySelector('[data-k="pct"]').value = pctOf(rows[row.dataset.i].amount); });
         total();
       };
+      el.querySelector('#pp-contract').onblur = (e) => { e.target.value = fmtNum(toNum(e.target.value)); };
       el.querySelector('#pp-add').onclick = () => { collect(); rows.push({}); draw(); box.querySelector('.pp-row:last-child [data-k="name"]').focus(); };
       el.querySelector('#pp-save').onclick = () => { try {
         collect();
         box.querySelectorAll('.bad').forEach((x) => x.classList.remove('bad'));
         const list = rows.filter((r) => r.name || r.amount || r.when || r.due);
-        const bad = list.findIndex((r) => !r.name || !(r.amount > 0));
+        // Only the amount is required. A payment with no description takes the "when" text, or its number.
+        const bad = list.findIndex((r) => !(r.amount > 0));
         if (bad >= 0) {
-          // Show what is missing where it can be seen: a message, and the field itself marked and scrolled to.
+          // Show what is missing where it can be seen: a message by the save button, and the field marked and scrolled to.
           const i = rows.indexOf(list[bad]);
-          const msg = `בתשלום ${i + 1} חסר ${list[bad].name ? 'סכום' : 'שם'}.`;
+          const msg = `בתשלום ${i + 1} חסר סכום.`;
           el.querySelector('#pp-err').textContent = msg;
-          toast(msg);
-          const f = box.querySelector(`.pp-row[data-i="${i}"] [data-k="${list[bad].name ? 'amount' : 'name'}"]`);
+          const f = box.querySelector(`.pp-row[data-i="${i}"] [data-k="amount"]`);
           if (f) { f.classList.add('bad'); f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.focus({ preventScroll: true }); }
           return;
         }
-        Store.data.casaMilestones = list.map((r) => ({ name: r.name, when: r.when || '', due: r.due || '', amount: Number(r.amount), paid: r.paid || null, invoice: r.invoice || '' }));
-        p.contract = Number(contract) || list.reduce((s, r) => s + Number(r.amount), 0);
-        Store.log(`עדכן את התשלומים לפי ההסכם: ${list.length} תשלומים, ${ils(p.contract)}`, TEAM.pm.name);
+        Store.data.casaMilestones = list.map((r) => ({ name: r.name || r.when || `תשלום ${rows.indexOf(r) + 1}`, when: r.name ? r.when || '' : '', due: r.due || '', amount: Number(r.amount), paid: r.paid || null, invoice: r.invoice || '' }));
+        const proj = Store.data.project; // the project may have been reloaded while the window was open
+        proj.contract = Number(contract) || list.reduce((s, r) => s + Number(r.amount), 0);
+        Store.log(`עדכן את התשלומים לפי ההסכם: ${list.length} תשלומים, ${ils(proj.contract)}`, TEAM.pm.name);
         Store.save();
         closeModal();
         toast(list.length ? `נשמרו ${list.length} תשלומים` : 'התשלומים נמחקו');
