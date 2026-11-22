@@ -202,7 +202,9 @@ const Live = {
   // Uploads a file into the current project's folder and returns its "f:" reference.
   async upload(file, { internal = false } = {}) {
     const pid = Store.data.project.id;
-    const safe = file.name.replace(/[^\w.\-]+/g, '_').slice(-80);
+    let safe = file.name.replace(/[^\w.\-]+/g, '_').slice(-80);
+    // Videos are recognised by their extension, so make sure the stored name has one.
+    if (/^video\//.test(file.type) && !isVideo(safe)) safe += file.type === 'video/quicktime' ? '.mov' : '.mp4';
     const path = `${pid}/${internal ? 'internal/' : ''}${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safe}`;
     const { error } = await this.sb.storage.from('files').upload(path, file, { contentType: file.type || undefined });
     if (error) throw error;
@@ -234,6 +236,14 @@ const Live = {
 function media(src) {
   if (typeof src === 'string' && src.startsWith('f:')) return Live.urls[src] || '';
   return src || '';
+}
+
+// Photo-journal items can be videos; they are told apart by the file extension.
+function isVideo(src) { return /\.(mp4|mov|m4v|webm|3gp)($|[?#])/i.test(String(src || '')); }
+// A thumbnail for a journal item: the image, or the video's first frame with a play badge.
+function thumbHtml(src) {
+  if (!isVideo(src)) return `<img src="${esc(media(src))}" alt="" loading="lazy">`;
+  return `<video src="${esc(media(src))}#t=0.1" muted playsinline preload="metadata"></video><span class="play-badge" aria-hidden="true"></span>`;
 }
 
 // Opens an uploaded file in a new tab. Returns false when there is no real file (demo data).

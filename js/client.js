@@ -101,7 +101,7 @@ function openLightbox(items, start = 0) {
       <div class="lb-top"><span class="t">${esc(it.title || '')}</span><span class="n">${i + 1} / ${items.length}</span>
         <button class="icon-btn" data-x aria-label="סגירה">${icon('close')}</button></div>
       <div class="lb-stage">
-        <img src="${esc(media(it.src))}" alt="${esc(it.title || '')}">
+        ${isVideo(it.src) ? `<video src="${esc(media(it.src))}" controls playsinline autoplay></video>` : `<img src="${esc(media(it.src))}" alt="${esc(it.title || '')}">`}
         ${items.length > 1 ? `<button class="nav prev" data-step="-1" aria-label="הקודמת">${icon('back')}</button><button class="nav next" data-step="1" aria-label="הבאה">${icon('chevron')}</button>` : ''}
       </div>`;
   };
@@ -118,7 +118,8 @@ function openLightbox(items, start = 0) {
     if (e.target.closest('[data-x]') || e.target.classList.contains('lb-stage')) close();
   });
   let x0 = null;
-  el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  // A swipe on a video is the player's seek bar, not "next photo".
+  el.addEventListener('touchstart', (e) => { x0 = e.target.closest('video') ? null : e.touches[0].clientX; }, { passive: true });
   el.addEventListener('touchend', (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); x0 = null; });
   document.addEventListener('keydown', onKey);
   document.body.style.overflow = 'hidden';
@@ -217,7 +218,7 @@ Pages.home = () => {
           </div>
         </div>
         ${latest && latest.photos.length ? `<button class="lux photo" data-lbhome="0" aria-label="תמונת השבוע">
-          <img src="${esc(media(latest.photos[0]))}" alt="" loading="lazy">
+          ${thumbHtml(latest.photos[0])}
           <span class="tag">מהשטח השבוע · ${projectAlbum().length} תמונות</span>
           <span class="cap"><b>${esc(latest.title)}</b>${fmtDate(latest.date)}</span>
         </button>` : ''}
@@ -258,7 +259,7 @@ Pages.home = () => {
 
       <section style="margin-top:64px">
         <div class="section-title"><div><span class="eyebrow">מהשטח</span><h2 style="margin-top:8px">התמונות האחרונות</h2></div><a class="link-btn" href="#/photos">ליומן הפרויקט</a></div>
-        <div class="mosaic">${gallery.map((g, i) => `<button class="lux" data-lbg="${i}" aria-label="${esc(g.title)}"><img src="${esc(media(g.src))}" alt="" loading="lazy"><span class="cap"><b>${esc(g.title)}</b>${esc(g.sub)}</span></button>`).join('')}</div>
+        <div class="mosaic">${gallery.map((g, i) => `<button class="lux" data-lbg="${i}" aria-label="${esc(g.title)}">${thumbHtml(g.src)}<span class="cap"><b>${esc(g.title)}</b>${esc(g.sub)}</span></button>`).join('')}</div>
       </section>
 
       ${aboutSection()}`,
@@ -824,7 +825,7 @@ function bindBA(root) {
   };
 }
 function luxImg(src, i, cap = '', sub = '') {
-  return `<button class="lux" data-lb="${i}" aria-label="הגדלת תמונה${cap ? ': ' + esc(cap) : ''}"><img src="${esc(media(src))}" alt="" loading="lazy">${cap ? `<span class="cap"><b>${esc(cap)}</b>${esc(sub)}</span>` : ''}</button>`;
+  return `<button class="lux" data-lb="${i}" aria-label="${isVideo(src) ? 'צפייה בסרטון' : 'הגדלת תמונה'}${cap ? ': ' + esc(cap) : ''}">${thumbHtml(src)}${cap ? `<span class="cap"><b>${esc(cap)}</b>${esc(sub)}</span>` : ''}</button>`;
 }
 
 // Construction stages a photo can belong to. One update can sit in several (e.g. plumbing, electricity and A/C).
