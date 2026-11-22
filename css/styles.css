@@ -872,3 +872,5 @@ button.pay-check:hover { border-color: var(--st-green); }
 details.more-fields { margin: 4px 0 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; }
 details.more-fields summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink-2, var(--ink)); }
 details.more-fields[open] summary { margin-bottom: 10px; }
+
+.pp-f .input.bad { border-color: var(--st-red); box-shadow: 0 0 0 3px var(--st-red-bg); }
