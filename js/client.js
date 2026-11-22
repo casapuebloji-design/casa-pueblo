@@ -56,7 +56,7 @@ function approveChangeFlow(changeId) {
     title: `שינוי #${c.no}: ${c.title}`,
     body: `
       <dl class="kv">
-        <dt>תוספת לחוזה</dt><dd class="num">${ils(c.amount)}${c.vat ? ' + מע"מ' : ''}</dd>
+        <dt>תוספת לחוזה</dt><dd class="num">${ils(c.amount)} כולל מע"מ</dd>
         <dt>תאריך בקשה</dt><dd>${fmtDate(c.date)}</dd>
         <dt>השפעה על לו״ז</dt><dd>ללא שינוי במועד המסירה</dd>
       </dl>
@@ -71,7 +71,7 @@ function approveChangeFlow(changeId) {
         if (contract) contract.total += c.amount;
         const ms = Store.data.casaMilestones || [];
         if (ms.length) ms[ms.length - 1].amount += c.amount;
-        Store.log(`אישר את שינוי #${c.no} – ${c.title} (${ils(c.amount)}${c.vat ? ' + מע"מ' : ''})`);
+        Store.log(`אישר את שינוי #${c.no} – ${c.title} (${ils(c.amount)} כולל מע"מ)`);
         Store.notify(`התוספת שאישרת (${c.title}) הועברה לביצוע`, 'documents');
         Store.save();
         closeModal();
@@ -309,7 +309,7 @@ Pages.project = () => {
             <ul class="rows">
               ${d.changes.map((c) => `
                 <li class="row">
-                  <div class="main-col"><div class="title">שינוי #${c.no}: ${esc(c.title)}</div><div class="sub">${fmtDate(c.date)} · <span class="num">${ils(c.amount)}${c.vat ? ' + מע"מ' : ''}</span></div></div>
+                  <div class="main-col"><div class="title">שינוי #${c.no}: ${esc(c.title)}</div><div class="sub">${fmtDate(c.date)} · <span class="num">${ils(c.amount)} כולל מע"מ</span></div></div>
                   <div class="end">${c.status === 'approved' ? pill('green', 'אושר') : `<button class="btn btn-sm btn-primary" data-change="${c.id}">לאישור</button>`}</div>
                 </li>`).join('')}
             </ul>

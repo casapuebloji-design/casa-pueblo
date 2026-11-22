@@ -63,7 +63,7 @@ function financeCasa() {
           <div class="card-pad" style="padding-bottom:4px"><h3>שינויים ותוספות</h3></div>
           <ul class="rows">
             ${d.changes.map((c) => `<li class="row compact"><div class="main-col"><div class="title">#${c.no} ${esc(c.title)}</div><div class="sub">${fmtDate(c.date)}</div></div>
-              <div class="end"><span class="num small">${ils(c.amount)}${c.vat ? ' + מע"מ' : ''}</span>${c.status === 'approved' ? pill('green', 'אושר') : pill('yellow', 'ממתין')}</div></li>`).join('')}
+              <div class="end"><span class="num small">${ils(c.amount)} כולל מע"מ</span>${c.status === 'approved' ? pill('green', 'אושר') : pill('yellow', 'ממתין')}</div></li>`).join('')}
           </ul>
         </article>
       </div>

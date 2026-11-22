@@ -220,7 +220,7 @@ function milestoneForm(m) {
     title: m ? `עריכה: ${m.name}` : 'אבן דרך חדשה לתשלום',
     fields: [
       { id: 'name', label: 'שם אבן הדרך', value: m && m.name, required: true, placeholder: 'למשל: מקדמה בחתימת הסכם' },
-      { id: 'amount', label: 'סכום (₪)', type: 'number', value: m ? m.amount : '', required: true },
+      { id: 'amount', label: 'סכום (₪) כולל מע"מ', type: 'number', value: m ? m.amount : '', required: true },
       { id: 'due', label: 'מועד לתשלום', type: 'date', value: m && m.due },
       ...(m && m.paid ? [
         { id: 'paid', label: 'תאריך התשלום', type: 'date', value: m.paid },
@@ -417,7 +417,7 @@ const ACTIONS = {
           { id: `${k}_email`, label: `${label} – אימייל`, type: 'email', value: team[k] && team[k].email },
         ]),
         { id: 'type', label: 'סוג הפרויקט', type: 'select', options: types, value: p.type },
-        { id: 'contract', label: 'סכום השיפוץ (₪)', type: 'number', value: p.contract || '' },
+        { id: 'contract', label: 'סכום השיפוץ (₪) כולל מע"מ', type: 'number', value: p.contract || '' },
         { id: 'budget', label: 'תקציב כולל של המשפחה (לא חובה)', type: 'number', value: p.budget || '' },
         { id: 'start', label: 'תאריך התחלה', type: 'date', value: p.start },
         { id: 'handover', label: 'תאריך מסירה משוער', type: 'date', value: p.handover },
@@ -571,14 +571,14 @@ const ACTIONS = {
       title: 'שינוי / תוספת לחוזה',
       fields: [
         { id: 'title', label: 'תיאור השינוי', required: true },
-        { id: 'amount', label: 'עלות (₪) + מע"מ', type: 'number', required: true },
+        { id: 'amount', label: 'עלות (₪) כולל מע"מ', type: 'number', required: true },
       ],
       submit: 'שליחה לאישור הלקוח',
       onSave(v) {
         const no = Math.max(0, ...Store.data.changes.map((c) => c.no)) + 1;
         const id = 'c' + Date.now();
-        Store.data.changes.push({ id, no, title: v.title, amount: v.amount, vat: true, status: 'pending', date: TODAY });
-        Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור שינוי #${no}: ${v.title}`, sub: `${ils(v.amount)} + מע"מ תוספת`, ref: { page: 'change', id }, level: 'yellow', done: false });
+        Store.data.changes.push({ id, no, title: v.title, amount: v.amount, status: 'pending', date: TODAY });
+        Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור שינוי #${no}: ${v.title}`, sub: `תוספת ${ils(v.amount)} כולל מע"מ`, ref: { page: 'change', id }, level: 'yellow', done: false });
         Store.log(`הוסיף שינוי #${no} – ${v.title}`, TEAM.pm.name);
         Store.notify(`שינוי #${no} ממתין לאישורך`, 'tasks');
         Store.save();
@@ -735,7 +735,7 @@ Pages['bo-new'] = (q) => { const L = leadFor(q) || {}; return (!isJorge() ? { ti
         <label class="field"><span>אדריכלית / מעצבת</span><input class="input" name="arch" list="team-names" value="${esc(L.designer || '')}"></label>
         <datalist id="team-names">${STAFF_PICK.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
         <label class="field"><span>סוג הפרויקט</span><select class="input" name="ptype">${PROJECT_TYPES.map((t) => `<option ${t === L.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
-        <label class="field"><span>סכום השיפוץ (₪)</span><input class="input" type="number" name="amount" inputmode="numeric" value="${esc(L.amount || '')}"></label>
+        <label class="field"><span>סכום השיפוץ (₪) כולל מע"מ</span><input class="input" type="number" name="amount" inputmode="numeric" value="${esc(L.amount || '')}"></label>
         <label class="field"><span>תאריך התחלה</span><input class="input" type="date" name="start" value="${L.start_month ? L.start_month + '-01' : TODAY}"></label>
         <label class="field"><span>תאריך יעד</span><input class="input" type="date" name="end" value="${L.start_month && L.duration_months ? (() => { const [y, m] = L.start_month.split('-').map(Number); const d = new Date(y, m - 1 + Number(L.duration_months), 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; })() : ''}"></label>
         <label class="field"><span>תקציב כולל של המשפחה (לא חובה)</span><input class="input" type="number" name="budget" inputmode="numeric"></label>
