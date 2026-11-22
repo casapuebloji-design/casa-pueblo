@@ -89,7 +89,8 @@ const Live = {
     Store.data.project.id = row.id;
     Store.data.portfolio = this.portfolio();
     this.version = row.version;
-    if (Store.data.team) Object.keys(TEAM).forEach((k) => Store.data.team[k] && Object.assign(TEAM[k], Store.data.team[k]));
+    // A team role the project does not have (e.g. the demo bookkeeper) is blanked so it is not shown.
+    if (Store.data.team) Object.keys(TEAM).forEach((k) => Object.assign(TEAM[k], Store.data.team[k] || { name: '', phone: '', email: '' }));
     Store.session.pid = row.id;
     await this.signAll(Store.data);
     return true;

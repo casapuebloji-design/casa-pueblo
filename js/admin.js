@@ -411,7 +411,7 @@ const ACTIONS = {
         { id: 'c2', label: 'לקוח נוסף – שם', value: m2.name },
         { id: 'c2e', label: 'לקוח נוסף – אימייל', type: 'email', value: m2.email },
         { id: 'c2p', label: 'לקוח נוסף – טלפון', type: 'tel', value: m2.phone },
-        ...[['pm', 'מנהל פרויקט'], ['architect', 'אדריכלית / מעצבת'], ['office', 'הנהלת חשבונות']].flatMap(([k, label]) => [
+        ...[['pm', 'מנהל פרויקט'], ['architect', 'אדריכלית / מעצבת']].flatMap(([k, label]) => [
           { id: `${k}_name`, label: `${label} – שם`, value: team[k] && team[k].name },
           { id: `${k}_phone`, label: `${label} – טלפון`, type: 'tel', value: team[k] && team[k].phone },
           { id: `${k}_email`, label: `${label} – אימייל`, type: 'email', value: team[k] && team[k].email },
@@ -425,7 +425,7 @@ const ACTIONS = {
         { id: 'image', label: 'תמונה ראשית', type: 'select', options: [...(String(p.image).startsWith('f:') ? [[p.image, 'התמונה שהועלתה']] : []), ['assets/img/hero-home.jpg', 'בית עם חצר'], ['assets/img/hero-4.jpg', 'סלון'], ['assets/img/hero-1.jpg', 'כניסה'], ['assets/img/hero-5.jpg', 'פינת אוכל'], ['assets/img/j-33.jpg', 'סלון 2']], value: p.image },
       ],
       validate(v) {
-        const bad = [v.c1e, v.c2e, v.pm_email, v.architect_email, v.office_email].find((e) => e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+        const bad = [v.c1e, v.c2e, v.pm_email, v.architect_email].find((e) => e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
         return bad ? `כתובת המייל "${bad}" לא תקינה` : '';
       },
       onSave(v) {
@@ -443,7 +443,7 @@ const ACTIONS = {
             Object.assign(row, { name, email: (email || '').toLowerCase(), phone });
           });
           // The team card the family sees (name, phone, email). TEAM is the in-memory copy the pages read.
-          ['pm', 'architect', 'office'].forEach((k) => {
+          ['pm', 'architect'].forEach((k) => {
             const t = { ...(team[k] || TEAM[k] || {}), name: v[`${k}_name`], phone: v[`${k}_phone`], email: v[`${k}_email`].toLowerCase() };
             team[k] = t;
             if (TEAM[k]) Object.assign(TEAM[k], t);
@@ -776,7 +776,6 @@ async function createLiveProject(f) {
   const team = {
     pm: { name: f.get('pm') || '', role: 'מנהל פרויקט', phone: '', email: '' },
     architect: { name: f.get('arch') || '', role: 'אדריכלית ומעצבת', phone: '', email: '' },
-    office: { name: '', role: 'הנהלת חשבונות', phone: '', email: '' },
   };
   const members = [['c1', 'בעל הבית'], ['c2', 'בן/בת זוג']]
     .filter(([k]) => f.get(k) || f.get(k + 'c'))
