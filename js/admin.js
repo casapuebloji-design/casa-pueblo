@@ -166,7 +166,7 @@ Pages['bo-home'] = (q) => {
 
 /* ---------- ניהול פרויקט ---------- */
 const MAX_PHOTOS = 30; // per photo update
-const MAX_VIDEO_MB = 50; // the storage bucket's per-file limit (Supabase free plan)
+const MAX_VIDEO_MB = 200; // the storage bucket's per-file limit (Pro plan; the project's global limit must be at least this)
 const PROJECT_ACTIONS = [
   ['weekly', 'send', 'הסיכום השבועי'],
   ['stage', 'timeline', 'עדכון שלב והתקדמות'],
@@ -299,7 +299,7 @@ function photoForm(target) {
       const heic = files.filter((f) => /^image\/hei[cf]$/i.test(f.type) || /\.hei[cf]$/i.test(f.name));
       if (heic.length) return `${heic.length} מהתמונות בפורמט HEIC (מאייפון), והדפדפן לא יציג אותן. מעלים אותן ישר מהנייד, שממיר ל־JPG לבד, או ממירים ל־JPG לפני ההעלאה.`;
       const big = files.filter((f) => /^video\//.test(f.type) && f.size > MAX_VIDEO_MB * 1024 * 1024);
-      if (big.length) return `${big.length === 1 ? 'סרטון אחד גדול' : `${big.length} סרטונים גדולים`} מ־${MAX_VIDEO_MB}MB (${big.map((f) => Math.round(f.size / 1048576) + 'MB').join(', ')}). אפשר לקצר אותו בטלפון (עריכה ← חיתוך) ולהעלות שוב. סרטון של עד כחצי דקה בדרך כלל עובר.`;
+      if (big.length) return `${big.length === 1 ? 'סרטון אחד גדול' : `${big.length} סרטונים גדולים`} מ־${MAX_VIDEO_MB}MB (${big.map((f) => Math.round(f.size / 1048576) + 'MB').join(', ')}). אפשר לקצר אותו בטלפון (עריכה ← חיתוך) ולהעלות שוב. סרטון של עד כ־3 דקות בדרך כלל עובר.`;
       return '';
     },
     async onSave(v) { return withUpload(async () => {
