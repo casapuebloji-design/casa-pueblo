@@ -21,9 +21,6 @@ Pages.finance = (q) => {
       root.querySelectorAll('[data-exp]').forEach((r) => (r.onclick = () => expenseDetail(r.dataset.exp)));
       root.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => App.go('finance', { ...q, tab, view: b.dataset.view })));
       root.querySelectorAll('[data-fcat]').forEach((b) => (b.onclick = () => App.go('finance', { tab: 'forecast', cat: b.dataset.fcat })));
-      root.querySelectorAll('[data-paycheck]').forEach((b) => (b.onclick = () => togglePaid(b.dataset.paycheck)));
-      const plan = root.querySelector('#pp-edit');
-      if (plan) plan.onclick = () => paymentPlanEditor();
       const doc = root.querySelector('#pp-doc');
       if (doc) doc.onclick = () => { if (!openFile(doc.dataset.path)) App.go('documents'); };
       bindTips(root);
@@ -31,30 +28,28 @@ Pages.finance = (q) => {
   };
 };
 
-// Jorge manages the payments, also while looking at the page "as the client" (the finance page is a client page).
-function canManagePayments() { return !!(Store.session && Store.session.role === 'staff' && isJorge()); }
-
-// The V box next to each payment. Only Jorge can tick it; everyone else sees it read-only.
-function payCheck(key, paid) {
-  const can = canManagePayments();
+// The V box next to each payment. Editable only in the Back Office (Jorge); the family sees it read-only.
+function payCheck(key, paid, editable) {
   const label = paid ? `שולם ${fmtDate(paid)}` : 'טרם שולם';
-  return can
+  return editable
     ? `<button class="pay-check ${paid ? 'on' : ''}" data-paycheck="${key}" aria-pressed="${!!paid}" aria-label="${label}${paid ? '. לחיצה לביטול הסימון' : '. לחיצה לסימון כשולם'}">${paid ? icon('check') : ''}</button>`
     : `<span class="pay-check ${paid ? 'on' : ''}" role="img" aria-label="${label}">${paid ? icon('check') : ''}</span>`;
 }
 
-function togglePaid(key) {
+// Ticks or unticks a payment. `after` redraws whatever screen the box was on.
+function togglePaid(key, after = () => App.render()) {
   const [kind, id] = key.split(':');
-  const item = kind === 'm' ? (Store.data.casaMilestones || [])[Number(id)] : Store.data.changes.find((c) => c.id === id);
+  const ms = Store.data.casaMilestones || [];
+  const item = kind === 'm' ? ms[Number(id)] : Store.data.changes.find((c) => c.id === id);
   if (!item) return;
-  const name = kind === 'm' ? item.name : `תוספת #${item.no} – ${item.title}`;
+  const name = kind === 'm' ? `תשלום ${Number(id) + 1} – ${item.name}` : `תוספת #${item.no} – ${item.title}`;
   const commit = (paid) => {
     item.paid = paid;
     if (!paid && kind === 'm') item.invoice = '';
     Store.log(`${paid ? 'סימן כשולם' : 'ביטל סימון תשלום'}: ${name} ${ils(item.amount)}`, TEAM.pm.name);
     Store.save();
     toast(paid ? `${name} סומן כשולם` : 'הסימון בוטל');
-    App.render();
+    after();
   };
   if (!item.paid) return commit(TODAY);
   openModal({
@@ -65,65 +60,75 @@ function togglePaid(key) {
   });
 }
 
+// Payment title with its number from the contract: "תשלום 2 · סיום שלד".
+function payTitle(m, i) {
+  const no = `תשלום ${i + 1}`;
+  return `<span class="pay-no">${no}</span>${m.name && m.name !== no ? ` ${esc(m.name)}` : ''}`;
+}
+
+// The contract payments list. Shared by the family's finance page (read-only) and the Back Office (editable).
+function contractPaymentsHtml(cm, editable) {
+  if (!cm.ms.length) return '';
+  const paidPct = cm.contract ? cm.paid / cm.contract * 100 : 0;
+  return `
+    <div class="split small ink-2" style="margin-bottom:6px"><span>${cm.ms.filter((m) => m.paid).length} מתוך ${cm.ms.length} תשלומים שולמו</span><b class="num">${pct(paidPct, 0)}</b></div>
+    <div class="progress dark terra" style="margin-bottom:10px"><i style="width:${Math.min(paidPct, 100).toFixed(1)}%"></i></div>
+    <ul class="pay-list">
+      ${cm.ms.map((m, i) => `<li class="${m.paid ? 'paid' : m === cm.next ? 'next' : ''}">
+        ${payCheck(`m:${i}`, m.paid, editable)}
+        <div class="pl-main"><b>${payTitle(m, i)}</b><span class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice ? ` · ${esc(m.invoice)}` : ''}` : esc(payWhen(m))}</span></div>
+        <div class="pl-amt"><b class="num">${ils(m.amount)}</b><span class="sub">${shareOf(m.amount, cm.contract)}</span></div>
+      </li>`).join('')}
+      <li class="total"><span></span><div class="pl-main"><b>סה״כ ההסכם</b></div><div class="pl-amt"><b class="num">${ils(cm.contract)}</b></div></li>
+    </ul>`;
+}
+
+// Additions and changes: their own totals and V boxes (only approved ones can be paid).
+function additionsHtml(cm, editable) {
+  if (!cm.adds.length && !cm.pending.length) return '<div class="empty">אין תוספות או שינויים</div>';
+  return `
+    ${cm.adds.length ? `<dl class="pay-sum">
+      <div><dt>סה״כ תוספות</dt><dd class="num">${ils(cm.addTotal)}</dd></div>
+      <div><dt>שולם</dt><dd class="num">${ils(cm.addPaid)} <span>${shareOf(cm.addPaid, cm.addTotal)}</span></dd></div>
+      <div><dt>יתרה</dt><dd class="num">${ils(cm.addLeft)} <span>${shareOf(cm.addLeft, cm.addTotal)}</span></dd></div>
+    </dl>` : ''}
+    <ul class="pay-list">
+      ${cm.adds.map((c) => `<li class="${c.paid ? 'paid' : ''}">
+        ${payCheck(`c:${c.id}`, c.paid, editable)}
+        <div class="pl-main"><b><span class="pay-no">תוספת ${c.no}</span> ${esc(c.title)}</b><span class="sub">${c.paid ? `שולם ${fmtDate(c.paid)}` : `אושר · ${fmtDate(c.date)}`}</span></div>
+        <div class="pl-amt"><b class="num">${ils(c.amount)}</b><span class="sub">כולל מע"מ</span></div>
+      </li>`).join('')}
+      ${cm.pending.map((c) => `<li class="pending">
+        <span class="pay-check muted" aria-hidden="true"></span>
+        <div class="pl-main"><b><span class="pay-no">תוספת ${c.no}</span> ${esc(c.title)}</b><span class="sub">ממתין לאישור הלקוח · ${fmtDate(c.date)}</span></div>
+        <div class="pl-amt"><b class="num">${ils(c.amount)}</b>${pill('yellow', 'ממתין')}</div>
+      </li>`).join('')}
+    </ul>
+    <p class="form-hint">תוספת נכנסת לסה״כ הפרויקט רק אחרי שהלקוח מאשר אותה.</p>`;
+}
+
 function financeCasa() {
   const d = Store.data;
   const cm = casaModel(d);
-  const jorge = canManagePayments();
   const contractDoc = (d.documents || []).find((x) => x.cat === 'הסכם התקשרות');
-  const paidPct = cm.contract ? cm.paid / cm.contract * 100 : 0;
+  const nextNo = cm.next ? `תשלום ${cm.ms.indexOf(cm.next) + 1}` : '';
   return `
     <div class="kpis four">
       <div class="card stat"><div class="k">סה״כ הפרויקט</div><div class="v num">${ils(cm.grand)}</div><div class="s">הסכם ${ils(cm.contract)}${cm.addTotal ? ` + תוספות ${ils(cm.addTotal)}` : ''}</div></div>
       <div class="card stat"><div class="k">שולם עד עכשיו</div><div class="v num">${ils(cm.paid)}</div><div class="s">${shareOf(cm.paid, cm.contract)} מההסכם</div></div>
       <div class="card stat"><div class="k">יתרה לתשלום</div><div class="v num">${ils(cm.left)}</div><div class="s">${shareOf(cm.left, cm.contract)} מההסכם</div></div>
-      <div class="card stat accent"><div class="k">התשלום הבא</div><div class="v num">${cm.next ? ils(cm.next.amount) : '—'}</div><div class="s">${cm.next ? esc([cm.next.name, payWhen(cm.next)].filter(Boolean).join(' · ')) : cm.ms.length ? 'כל התשלומים שולמו' : ''}</div></div>
+      <div class="card stat accent"><div class="k">התשלום הבא</div><div class="v num">${cm.next ? ils(cm.next.amount) : '—'}</div><div class="s">${cm.next ? esc([nextNo, cm.next.name !== nextNo ? cm.next.name : '', payWhen(cm.next)].filter(Boolean).join(' · ')) : cm.ms.length ? 'כל התשלומים שולמו' : ''}</div></div>
     </div>
 
     <div class="grid wide-left" style="margin-top:14px">
       <article class="card card-pad">
         <div class="card-head"><h3>התשלומים לפי ההסכם</h3>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            ${contractDoc ? `<button class="link-btn small" id="pp-doc" data-path="${esc(contractDoc.path || '')}">${icon('documents', 'xs')}הסכם ההתקשרות</button>` : ''}
-            ${jorge ? `<button class="btn btn-sm btn-ghost" id="pp-edit">${icon('edit', 'xs')}עריכת התשלומים</button>` : ''}
-          </div></div>
-        ${cm.ms.length ? `
-          <div class="split small ink-2" style="margin-bottom:6px"><span>${cm.ms.filter((m) => m.paid).length} מתוך ${cm.ms.length} תשלומים שולמו</span><b class="num">${pct(paidPct, 0)}</b></div>
-          <div class="progress dark terra" style="margin-bottom:10px"><i style="width:${Math.min(paidPct, 100).toFixed(1)}%"></i></div>
-          <ul class="pay-list">
-            ${cm.ms.map((m, i) => `<li class="${m.paid ? 'paid' : m === cm.next ? 'next' : ''}">
-              ${payCheck(`m:${i}`, m.paid)}
-              <div class="pl-main"><b>${esc(m.name)}</b><span class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice ? ` · ${esc(m.invoice)}` : ''}` : esc(payWhen(m))}</span></div>
-              <div class="pl-amt"><b class="num">${ils(m.amount)}</b><span class="sub">${shareOf(m.amount, cm.contract)}</span></div>
-            </li>`).join('')}
-            <li class="total"><span></span><div class="pl-main"><b>סה״כ ההסכם</b></div><div class="pl-amt"><b class="num">${ils(cm.contract)}</b></div></li>
-          </ul>
-          ${jorge ? '<p class="form-hint">לוחצים על הריבוע כדי לסמן תשלום שהתקבל. הלקוח רואה את הסימון, אבל לא יכול לשנות אותו.</p>' : ''}`
-        : `<div class="empty">${jorge
-          ? 'עוד לא הוזנו התשלומים מההסכם. מעלים את ההסכם ב"מסמכים" בקטגוריה "הסכם התקשרות", או לוחצים "עריכת התשלומים".'
-          : 'כאן יופיעו התשלומים לפי הסכם ההתקשרות, ברגע שקאסה פואבלו תזין אותם.'}</div>`}
+          ${contractDoc ? `<button class="link-btn small" id="pp-doc" data-path="${esc(contractDoc.path || '')}">${icon('documents', 'xs')}הסכם ההתקשרות</button>` : ''}</div>
+        ${contractPaymentsHtml(cm, false) || '<div class="empty">כאן יופיעו התשלומים לפי הסכם ההתקשרות, ברגע שקאסה פואבלו תזין אותם.</div>'}
       </article>
-
       <article class="card card-pad">
         <div class="card-head"><h3>תוספות ושינויים</h3></div>
-        ${cm.adds.length ? `
-          <dl class="pay-sum">
-            <div><dt>סה״כ תוספות</dt><dd class="num">${ils(cm.addTotal)}</dd></div>
-            <div><dt>שולם</dt><dd class="num">${ils(cm.addPaid)} <span>${shareOf(cm.addPaid, cm.addTotal)}</span></dd></div>
-            <div><dt>יתרה</dt><dd class="num">${ils(cm.addLeft)} <span>${shareOf(cm.addLeft, cm.addTotal)}</span></dd></div>
-          </dl>` : ''}
-        ${cm.adds.length || cm.pending.length ? `<ul class="pay-list">
-          ${cm.adds.map((c) => `<li class="${c.paid ? 'paid' : ''}">
-            ${payCheck(`c:${c.id}`, c.paid)}
-            <div class="pl-main"><b>#${c.no} ${esc(c.title)}</b><span class="sub">${c.paid ? `שולם ${fmtDate(c.paid)}` : `אושר · ${fmtDate(c.date)}`}</span></div>
-            <div class="pl-amt"><b class="num">${ils(c.amount)}</b><span class="sub">כולל מע"מ</span></div>
-          </li>`).join('')}
-          ${cm.pending.map((c) => `<li class="pending">
-            <span class="pay-check muted" aria-hidden="true"></span>
-            <div class="pl-main"><b>#${c.no} ${esc(c.title)}</b><span class="sub">ממתין לאישור הלקוח · ${fmtDate(c.date)}</span></div>
-            <div class="pl-amt"><b class="num">${ils(c.amount)}</b>${pill('yellow', 'ממתין')}</div>
-          </li>`).join('')}
-        </ul>
-        <p class="form-hint">תוספת נכנסת לסה״כ הפרויקט רק אחרי שהלקוח מאשר אותה.</p>` : '<div class="empty">אין תוספות או שינויים</div>'}
+        ${additionsHtml(cm, false)}
       </article>
     </div>`;
 }
