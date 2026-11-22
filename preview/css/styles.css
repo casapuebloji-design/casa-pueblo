@@ -876,3 +876,5 @@ details.more-fields[open] summary { margin-bottom: 10px; }
 .pp-f .input.bad { border-color: var(--st-red); box-shadow: 0 0 0 3px var(--st-red-bg); }
 .pp-no { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--ink-2); margin-bottom: -2px; }
 .pp-err { color: var(--st-red); font-size: 14px; font-weight: 600; align-self: center; }
+.pay-no { display: inline-block; font-size: 12px; font-weight: 700; color: var(--terra); background: var(--terra-soft); border-radius: 99px; padding: 1px 8px; margin-inline-end: 6px; vertical-align: 1px; white-space: nowrap; }
+.theme-navy .pay-no { background: rgba(212, 180, 131, .14); color: var(--gold); }

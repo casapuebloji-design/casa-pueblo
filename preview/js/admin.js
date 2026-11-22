@@ -292,8 +292,36 @@ function paymentPlanEditor({ fromContract = false } = {}) {
         closeModal();
         toast(list.length ? `נשמרו ${list.length} תשלומים` : 'התשלומים נמחקו');
         App.render();
+        setTimeout(paymentsBoard, 0); // back to the payments screen, where they are ticked as paid
       } catch (e) { toast('השמירה לא הצליחה: ' + e.message); } };
       draw();
+    },
+  });
+}
+
+// Back Office: the contract payments and additions, where Jorge ticks what was paid.
+// The family sees the same lists, read-only, on their finance page.
+function paymentsBoard() {
+  const cm = casaModel(Store.data);
+  const reopen = () => { closeModal(); App.render(); paymentsBoard(); };
+  openModal({
+    title: 'תשלומים לפי ההסכם',
+    wide: true,
+    body: cm.ms.length || cm.adds.length || cm.pending.length ? `
+      <dl class="pay-sum">
+        <div><dt>סה״כ ההסכם</dt><dd class="num">${ils(cm.contract)}</dd></div>
+        <div><dt>שולם עד עכשיו</dt><dd class="num">${ils(cm.paid)} <span>${shareOf(cm.paid, cm.contract)}</span></dd></div>
+        <div><dt>יתרה לתשלום</dt><dd class="num">${ils(cm.left)} <span>${shareOf(cm.left, cm.contract)}</span></dd></div>
+      </dl>
+      ${contractPaymentsHtml(cm, true) || '<div class="empty">עוד לא הוזנו התשלומים מההסכם.</div>'}
+      <p class="form-hint">לוחצים על הריבוע כשתשלום מתקבל. הלקוח רואה אותו מסומן כשולם בעמוד הכספים.</p>
+      <h3 style="margin:22px 0 10px">תוספות ושינויים</h3>
+      ${additionsHtml(cm, true)}`
+      : '<div class="empty">עוד לא הוזנו התשלומים מההסכם. לוחצים "עריכת התשלומים", או מעלים את ההסכם ב"העלאת מסמך" בקטגוריה "הסכם התקשרות".</div>',
+    foot: `<button class="btn btn-primary" id="pb-edit">${icon('edit')}${cm.ms.length ? 'עריכת התשלומים' : 'הזנת התשלומים מההסכם'}</button><button class="btn btn-ghost" data-close>סגירה</button>`,
+    onOpen(el) {
+      el.querySelectorAll('[data-paycheck]').forEach((b) => (b.onclick = () => togglePaid(b.dataset.paycheck, reopen)));
+      el.querySelector('#pb-edit').onclick = () => { closeModal(); paymentPlanEditor(); };
     },
   });
 }
@@ -595,7 +623,7 @@ const ACTIONS = {
     });
   },
   doc() { uploadDocFlow(); },
-  payment() { paymentPlanEditor(); },
+  payment() { paymentsBoard(); },
   change() {
     formModal({
       title: 'שינוי / תוספת לחוזה',
