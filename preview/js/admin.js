@@ -197,6 +197,9 @@ function paymentPlanEditor({ fromContract = false } = {}) {
   const p = Store.data.project;
   let rows = milestones().map((m) => ({ ...m }));
   if (!rows.length) rows = [{}, {}, {}];
+  // Amounts may be typed with commas or a shekel sign (480,000 / ₪480000): keep only the number.
+  const toNum = (v) => Number(String(v == null ? '' : v).replace(/[^\d.]/g, '')) || '';
+  const fmtNum = (v) => (v ? Number(v).toLocaleString('en-US') : '');
   let contract = Number(p.contract) || rows.reduce((s, r) => s + (Number(r.amount) || 0), 0) || '';
   const pctOf = (amt) => (contract && amt ? Math.round(amt / contract * 1000) / 10 : '');
 
@@ -205,8 +208,8 @@ function paymentPlanEditor({ fromContract = false } = {}) {
       <label class="pp-f name"><span>תשלום ${i + 1}</span><input class="input" data-k="name" value="${esc(r.name || '')}" placeholder="למשל: מקדמה בחתימת ההסכם"></label>
       <label class="pp-f when"><span>מתי (לפי ההסכם)</span><input class="input" data-k="when" value="${esc(r.when || '')}" placeholder="למשל: בסיום השלד"></label>
       <label class="pp-f due"><span>תאריך (לא חובה)</span><input class="input" type="date" data-k="due" value="${esc(r.due || '')}"></label>
-      <label class="pp-f pct"><span>%</span><input class="input num" type="number" inputmode="decimal" step="0.1" data-k="pct" value="${pctOf(r.amount)}"></label>
-      <label class="pp-f amt"><span>סכום (₪)</span><input class="input num" type="number" inputmode="decimal" data-k="amount" value="${r.amount || ''}"></label>
+      <label class="pp-f pct"><span>%</span><input class="input num" type="text" inputmode="decimal" data-k="pct" value="${pctOf(r.amount)}"></label>
+      <label class="pp-f amt"><span>סכום (₪)</span><input class="input num" type="text" inputmode="decimal" data-k="amount" value="${fmtNum(r.amount)}"></label>
       <button class="icon-btn pp-del" data-del="${i}" aria-label="מחיקת תשלום ${i + 1}" title="מחיקה">${icon('close')}</button>
       ${r.paid ? `<span class="pp-paid">${icon('check', 'xs')}שולם ${fmtDate(r.paid)}</span>` : ''}
     </div>`;
@@ -217,7 +220,7 @@ function paymentPlanEditor({ fromContract = false } = {}) {
     body: `
       ${fromContract ? '<p class="small" style="margin-top:0"><b>ההסכם נשמר במסמכים.</b> עכשיו רושמים כאן את התשלומים שמופיעים בו. כל תשלום יופיע ללקוח בנפרד בעמוד הכספים, עם ריבוע לסימון כשהוא משולם.</p>'
         : '<p class="small ink-2" style="margin-top:0">כל תשלום מופיע ללקוח בנפרד בעמוד הכספים. אפשר לרשום אחוז מסכום ההסכם, והסכום יחושב לבד.</p>'}
-      <label class="field" style="max-width:280px"><span>סכום ההסכם (₪, כולל מע"מ)</span><input class="input num" type="number" inputmode="decimal" id="pp-contract" value="${contract}"></label>
+      <label class="field" style="max-width:280px"><span>סכום ההסכם (₪, כולל מע"מ)</span><input class="input num" type="text" inputmode="decimal" id="pp-contract" value="${fmtNum(contract)}"></label>
       <div id="pp-rows"></div>
       <button class="link-btn" id="pp-add" style="margin-top:6px">${icon('plus')}הוספת תשלום</button>
       <div class="pp-total" id="pp-total"></div>
@@ -227,7 +230,7 @@ function paymentPlanEditor({ fromContract = false } = {}) {
       const box = el.querySelector('#pp-rows');
       const collect = () => box.querySelectorAll('.pp-row').forEach((row) => {
         const r = rows[row.dataset.i];
-        row.querySelectorAll('[data-k]').forEach((inp) => { if (inp.dataset.k !== 'pct') r[inp.dataset.k] = inp.dataset.k === 'amount' ? (Number(inp.value) || '') : inp.value.trim(); });
+        row.querySelectorAll('[data-k]').forEach((inp) => { if (inp.dataset.k !== 'pct') r[inp.dataset.k] = inp.dataset.k === 'amount' ? toNum(inp.value) : inp.value.trim(); });
       });
       const total = () => {
         const sum = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -242,8 +245,8 @@ function paymentPlanEditor({ fromContract = false } = {}) {
           const r = rows[row.dataset.i];
           const pctIn = row.querySelector('[data-k="pct"]');
           const amtIn = row.querySelector('[data-k="amount"]');
-          pctIn.oninput = () => { if (contract && pctIn.value !== '') { r.amount = Math.round(contract * Number(pctIn.value) / 100); amtIn.value = r.amount; } total(); };
-          amtIn.oninput = () => { r.amount = Number(amtIn.value) || ''; pctIn.value = pctOf(r.amount); total(); };
+          pctIn.oninput = () => { if (contract && toNum(pctIn.value) !== '') { r.amount = Math.round(contract * toNum(pctIn.value) / 100); amtIn.value = fmtNum(r.amount); } total(); };
+          amtIn.oninput = () => { r.amount = toNum(amtIn.value); pctIn.value = pctOf(r.amount); total(); };
         });
         box.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => {
           collect();
@@ -256,16 +259,26 @@ function paymentPlanEditor({ fromContract = false } = {}) {
       };
       el.querySelector('#pp-contract').oninput = (e) => {
         collect();
-        contract = Number(e.target.value) || '';
+        contract = toNum(e.target.value);
         box.querySelectorAll('.pp-row').forEach((row) => { row.querySelector('[data-k="pct"]').value = pctOf(rows[row.dataset.i].amount); });
         total();
       };
       el.querySelector('#pp-add').onclick = () => { collect(); rows.push({}); draw(); box.querySelector('.pp-row:last-child [data-k="name"]').focus(); };
-      el.querySelector('#pp-save').onclick = () => {
+      el.querySelector('#pp-save').onclick = () => { try {
         collect();
+        box.querySelectorAll('.bad').forEach((x) => x.classList.remove('bad'));
         const list = rows.filter((r) => r.name || r.amount || r.when || r.due);
         const bad = list.findIndex((r) => !r.name || !(r.amount > 0));
-        if (bad >= 0) { el.querySelector('#pp-err').textContent = `בתשלום ${rows.indexOf(list[bad]) + 1} חסר ${list[bad].name ? 'סכום' : 'שם'}.`; return; }
+        if (bad >= 0) {
+          // Show what is missing where it can be seen: a message, and the field itself marked and scrolled to.
+          const i = rows.indexOf(list[bad]);
+          const msg = `בתשלום ${i + 1} חסר ${list[bad].name ? 'סכום' : 'שם'}.`;
+          el.querySelector('#pp-err').textContent = msg;
+          toast(msg);
+          const f = box.querySelector(`.pp-row[data-i="${i}"] [data-k="${list[bad].name ? 'amount' : 'name'}"]`);
+          if (f) { f.classList.add('bad'); f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.focus({ preventScroll: true }); }
+          return;
+        }
         Store.data.casaMilestones = list.map((r) => ({ name: r.name, when: r.when || '', due: r.due || '', amount: Number(r.amount), paid: r.paid || null, invoice: r.invoice || '' }));
         p.contract = Number(contract) || list.reduce((s, r) => s + Number(r.amount), 0);
         Store.log(`עדכן את התשלומים לפי ההסכם: ${list.length} תשלומים, ${ils(p.contract)}`, TEAM.pm.name);
@@ -273,7 +286,7 @@ function paymentPlanEditor({ fromContract = false } = {}) {
         closeModal();
         toast(list.length ? `נשמרו ${list.length} תשלומים` : 'התשלומים נמחקו');
         App.render();
-      };
+      } catch (e) { toast('השמירה לא הצליחה: ' + e.message); } };
       draw();
     },
   });
