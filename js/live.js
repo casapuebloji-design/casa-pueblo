@@ -210,6 +210,9 @@ const Live = {
     if (error) throw error;
     const ref = 'f:' + path;
     await this.sign([ref]);
+    // Right after a large upload the signing call can come back without a link; try once more,
+    // otherwise the new item shows as a broken tile until the page is reloaded.
+    if (!this.urls[ref]) { await new Promise((r) => setTimeout(r, 1500)); await this.sign([ref]); }
     return ref;
   },
 
