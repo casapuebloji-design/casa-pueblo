@@ -161,9 +161,8 @@ Pages.home = () => {
   const daysLeft = daysBetween(TODAY, p.handover);
   const latest = d.updates[0];
   const pm = TEAM[p.pm];
-  const delays = d.timeline.filter((s) => s.status === 'delay');
-  const active = d.timeline.find((s) => s.status === 'active');
-  const nextStage = d.timeline.find((s) => s.status === 'future');
+  const actives = d.timeline.filter((s) => ['start', 'active', 'delay'].includes(s.status));
+  const nextStages = d.timeline.filter((s) => s.next && s.status === 'future');
   const gallery = d.updates.filter((u) => u.stage !== 'לפני').flatMap((u) => u.photos.map((src) => ({ src, title: u.title, sub: fmtDate(u.date) }))).slice(0, 5);
   const wk = latestSentSummary(d);
   const sinceUpdate = daysBetween(wk ? wk.week : p.weekly.updated, TODAY);
@@ -179,10 +178,10 @@ Pages.home = () => {
           <div class="stage-band">
             ${progressRing(p.progress, 74, 4, '#d4b483', 'rgba(242,235,223,.16)')}
             <div>
-              <div class="lbl">שלב נוכחי</div>
-              <div class="val">${esc(p.stage)}</div>
-              <div class="stage-steps" aria-hidden="true">${d.timeline.map((s) => `<i class="${s.status}" title="${esc(s.name)}"></i>`).join('')}</div>
-              <div class="stage-names"><span>${esc(d.timeline[0].name)}</span><span>${esc(d.timeline[d.timeline.length - 1].name)}</span></div>
+              <div class="lbl">${actives.length > 1 ? 'בביצוע עכשיו' : 'שלב נוכחי'}</div>
+              <div class="val">${actives.length > 2 ? `${actives.length} שלבים בביצוע` : esc(p.stage)}</div>
+              <div class="stage-steps" aria-hidden="true">${d.timeline.map((s) => `<i class="${stageStatus(s)}" title="${esc(s.name)}"></i>`).join('')}</div>
+              ${d.timeline.length ? `<div class="stage-names"><span>${esc(d.timeline[0].name)}</span><span>${esc(d.timeline[d.timeline.length - 1].name)}</span></div>` : ''}
             </div>
           </div>
         </div>
@@ -202,9 +201,8 @@ Pages.home = () => {
           ${weeklyGallery(wk)}
           <button class="link-btn small" id="wk-history" style="align-self:flex-start;margin-top:10px">לסיכומים הקודמים</button>` : `<blockquote>${esc(p.weekly.text)}</blockquote>`}
           <div class="highlights">
-            ${active ? `<span>בביצוע: <b>${esc(active.name)}</b></span>` : ''}
-            ${delays.map((s) => `<span>לתשומת לב: <b>${esc(s.name)}</b></span>`).join('')}
-            ${nextStage ? `<span>השלב הבא: <b>${esc(nextStage.name)}</b> · ${fmtDate(nextStage.ps)}</span>` : ''}
+            ${actives.map((s) => `<span>בביצוע: <b>${esc(s.name)}</b></span>`).join('')}
+            ${nextStages.length ? `<span>הבא בתור: <b>${esc(nextStages.map((s) => s.name).join(', '))}</b></span>` : ''}
           </div>
           <div class="sign">
             <span class="avatar navy lg">${initials(pm.name)}</span>
@@ -300,10 +298,10 @@ Pages.project = () => {
             <p class="ink-2" style="margin-bottom:0">${esc(p.scope)}</p>
           </article>
           <article class="card card-pad">
-            <div class="card-head"><h3>התקדמות לפי שלבים</h3><a class="link-btn small" href="#/timeline">ללוח הזמנים</a></div>
+            <div class="card-head"><h3>התקדמות לפי שלבים</h3><a class="link-btn small" href="#/timeline">לשלבי העבודה</a></div>
             <div class="progress dark" style="height:10px"><i style="width:${p.progress}%"></i></div>
             <div class="legend-status" style="margin-top:12px">
-              ${d.timeline.map((s) => `<span class="small">${statusPill(s.status).replace(STATUS[s.status][1], esc(s.name))}</span>`).join('')}
+              ${d.timeline.map((s) => `<span class="small">${statusPill(stageStatus(s)).replace(STATUS[stageStatus(s)][1], esc(s.name))}</span>`).join('')}
             </div>
           </article>
           <article class="card">
@@ -693,118 +691,49 @@ Pages.materials = (q) => {
   };
 };
 
-/* ---------- לוח זמנים ---------- */
-const TL_VIEWS = [['gantt', 'גאנט'], ['path', 'מסלול'], ['months', 'לפי חודשים']];
-
-function tlGantt(tl) {
-  const t0 = parseDate(tl[0].ps), t1 = parseDate(tl[tl.length - 1].pe);
-  const span = t1 - t0;
-  const x = (s) => ((parseDate(s) - t0) / span * 100).toFixed(2);
-  const months = [];
-  for (let dt = new Date(t0.getFullYear(), t0.getMonth() + 1, 1); dt <= t1; dt.setMonth(dt.getMonth() + 1)) {
-    months.push({ pos: ((dt - t0) / span * 100).toFixed(2), label: HEB_MONTHS_SHORT[dt.getMonth()] + (dt.getMonth() === 0 ? ` ${String(dt.getFullYear()).slice(2)}` : '') });
-  }
-  const todayX = x(TODAY);
-  return `<article class="card card-pad gantt" style="margin-bottom:18px">
-    <div class="gantt-inner">
-      <div class="gantt-months"><div></div><div class="m">${months.map((m) => `<span style="right:${m.pos}%">${m.label}</span>`).join('')}</div></div>
-      ${tl.map((s) => {
-        const aS = s.as || s.ps;
-        const aE = s.ae || (s.status === 'future' ? s.pe : TODAY);
-        const tip = `<b>${esc(s.name)}</b><div class="r"><span>מתוכנן</span><span>${fmtDateShort(s.ps)}–${fmtDateShort(s.pe)}</span></div><div class="r"><span>בפועל</span><span>${s.as ? fmtDateShort(s.as) : '—'}–${s.ae ? fmtDateShort(s.ae) : (s.as ? 'היום' : '—')}</span></div>`;
-        return `<div class="gantt-row">
-          <div>${esc(s.name)}</div>
-          <div class="gantt-track" tabindex="0" data-tip="${esc(tip)}">
-            <i class="gantt-bar plan" style="right:${x(s.ps)}%;width:${(x(s.pe) - x(s.ps)).toFixed(2)}%"></i>
-            ${s.status !== 'future' ? `<i class="gantt-bar ${s.status}" style="right:${x(aS)}%;width:${Math.max(x(aE) - x(aS), 0.6).toFixed(2)}%;top:12px;height:10px"></i>` : ''}
-            <i class="gantt-today" style="right:${todayX}%" aria-hidden="true"></i>
-          </div>
-        </div>`;
-      }).join('')}
-      <div class="small muted" style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap">
-        <span><i class="sw" style="border:1.5px dashed var(--line-2);vertical-align:middle"></i> תכנון</span>
-        <span><i class="sw" style="background:var(--st-blue);vertical-align:middle"></i> ביצוע בפועל</span>
-        <span><i class="sw" style="background:var(--terra);width:3px;vertical-align:middle"></i> היום</span>
-      </div>
-    </div>
-  </article>`;
+/* ---------- שלבי עבודה ---------- */
+// Four states, actual dates only: not started, started (on), in progress (since), done (on). Several stages can run at once.
+function stageKey(s) { return stageStatus(s); }
+function stageOn(s) { return ['start', 'active'].includes(stageKey(s)); } // being worked on now
+function stageWhen(s) {
+  const k = stageKey(s);
+  if (k === 'done') return s.ae ? `הסתיים ${fmtDate(s.ae)}` : 'הסתיים';
+  if (k === 'active') return s.as ? `בביצוע מ־${fmtDate(s.as)}` : 'בביצוע';
+  if (k === 'start') return s.as ? `התחלה ${fmtDate(s.as)}` : 'התחלה';
+  return 'טרם התחיל';
 }
 
-// A horizontal journey: one card per stage, the current one raised.
-function tlPath(tl) {
-  return `<div class="tl-path" role="list">
-    ${tl.map((s, i) => {
-      const pct = s.status === 'done' ? 100 : s.status === 'future' ? 0 : Math.round(Math.min(1, Math.max(0, (parseDate(TODAY) - parseDate(s.as || s.ps)) / Math.max(1, parseDate(s.pe) - parseDate(s.as || s.ps)))) * 100);
-      return `<div class="tp-step ${s.status}" role="listitem">
-        <div class="tp-node"><span>${s.status === 'done' ? icon('check') : i + 1}</span></div>
-        <div class="tp-card">
-          <div class="tp-name">${esc(s.name)}</div>
-          <div class="tp-dates">${fmtDateShort(s.ps)} – ${fmtDateShort(s.pe)}</div>
-          ${s.status === 'active' || s.status === 'delay' ? `<div class="progress dark" style="margin-top:8px"><i style="width:${pct}%"></i></div><div class="xs muted" style="margin-top:4px">${pct}% מהזמן המתוכנן</div>` : ''}
-          <div style="margin-top:8px">${statusPill(s.status)}</div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`;
-}
-
-// Month by month: what is happening in each month.
-function tlMonths(tl) {
-  const t0 = parseDate(tl[0].ps), t1 = parseDate(tl[tl.length - 1].pe);
-  const out = [];
-  for (let dt = new Date(t0.getFullYear(), t0.getMonth(), 1); dt <= t1; dt.setMonth(dt.getMonth() + 1)) {
-    const mStart = new Date(dt), mEnd = new Date(dt.getFullYear(), dt.getMonth() + 1, 0);
-    const items = tl.filter((s) => parseDate(s.ps) <= mEnd && parseDate(s.pe) >= mStart);
-    const now = parseDate(TODAY) >= mStart && parseDate(TODAY) <= mEnd;
-    out.push(`<article class="card tm-card ${now ? 'now' : ''} ${mEnd < parseDate(TODAY) ? 'past' : ''}">
-      <div class="tm-head"><b>${HEB_MONTHS[mStart.getMonth()]}</b><span>${mStart.getFullYear()}</span>${now ? pill('blue', 'החודש') : ''}</div>
-      ${items.map((s) => `<div class="tm-item ${s.status}"><i></i><span>${esc(s.name)}</span></div>`).join('') || '<div class="xs muted">אין שלבים</div>'}
-    </article>`);
-  }
-  return `<div class="tl-months">${out.join('')}</div>`;
-}
-
-Pages.timeline = (q) => {
+Pages.timeline = () => {
   const d = Store.data;
-  const tl = d.timeline;
-  if (!tl.length) return { title: 'לוח זמנים', html: '<div class="page-head"><div><h1>לוח זמנים</h1></div></div><div class="empty">לוח הזמנים עוד לא הוגדר</div>', mount() {} };
-  const view = TL_VIEWS.some(([k]) => k === q.view) ? q.view : (Store.session.tlView || 'gantt');
+  const tl = d.timeline || [];
+  if (!tl.length) return { title: 'שלבי עבודה', html: '<div class="page-head"><div><h1>שלבי העבודה</h1></div></div><div class="empty">שלבי העבודה עוד לא הוגדרו</div>', mount() {} };
+  const n = (k) => tl.filter((s) => stageKey(s) === k).length;
+  const act = tl.filter(stageOn);
+  const upNext = tl.filter((s) => s.next && stageKey(s) === 'future');
+  const pctDone = Math.round(n('done') / tl.length * 100);
   return {
-    title: 'לוח זמנים',
+    title: 'שלבי עבודה',
     html: `
-      <div class="page-head"><div><h1>לוח זמנים</h1><p>התכנון מול הביצוע בפועל, שלב אחר שלב</p></div>
-        <div class="seg" role="group" aria-label="תצוגה">${TL_VIEWS.map(([k, l]) => `<button aria-pressed="${k === view}" data-view="${k}">${l}</button>`).join('')}</div>
-      </div>
-      <div class="legend-status" style="margin-bottom:14px">${statusPill('done')}${statusPill('active')}${statusPill('delay')}${statusPill('future')}</div>
-      ${view === 'path' ? tlPath(tl) : view === 'months' ? tlMonths(tl) : tlGantt(tl)}
-
-      <ol class="timeline" style="margin-top:22px">
-        ${tl.map((s) => `
-          <li class="tl-item ${s.status}">
-            <span class="tl-dot">${s.status === 'done' ? icon('check') : s.status === 'delay' ? icon('alert') : ''}</span>
-            <article class="card tl-card">
-              <div class="top"><h3>${esc(s.name)}</h3>${statusPill(s.status)}</div>
-              <div class="tl-dates">
-                <div><div class="k">התחלה מתוכננת</div><div class="v">${fmtDate(s.ps)}</div></div>
-                <div><div class="k">סיום מתוכנן</div><div class="v">${fmtDate(s.pe)}</div></div>
-                <div><div class="k">התחלה בפועל</div><div class="v">${fmtDate(s.as)}</div></div>
-                <div><div class="k">סיום בפועל</div><div class="v">${fmtDate(s.ae)}</div></div>
-              </div>
-              ${s.note ? `<div class="tl-note">${esc(s.note)}</div>` : ''}
-              ${s.photos.length ? `<div class="tl-photos">${s.photos.map((src) => `<img src="${esc(media(src))}" alt="" data-src="${esc(media(src))}" loading="lazy">`).join('')}</div>` : ''}
-            </article>
-          </li>`).join('')}
-      </ol>`,
+      <div class="page-head"><div><h1>שלבי העבודה</h1><p>מה מתבצע בבית עכשיו, בזמן אמת</p></div>
+        ${App.isStaffView() ? `<button class="btn btn-accent" id="st-edit">${icon('edit')}עדכון שלבים</button>` : ''}</div>
+      <article class="card card-pad st-sum">
+        <div class="split"><b>${n('done')} מתוך ${tl.length} שלבים הסתיימו</b><b class="num">${pctDone}%</b></div>
+        <div class="progress dark" style="margin:10px 0 14px"><i style="width:${pctDone}%"></i></div>
+        <div class="st-legend"><span class="st-chip future">טרם התחיל · ${n('future')}</span><span class="st-chip start">התחלה · ${n('start')}</span><span class="st-chip active">בביצוע · ${n('active')}</span><span class="st-chip done">הסתיים · ${n('done')}</span></div>
+      </article>
+      ${act.length ? `<div class="section-title" style="margin-top:24px"><h2>בביצוע עכשיו</h2></div>
+        <div class="st-now">${act.map((s) => `<article class="card st-card ${stageKey(s)}"><span class="st-dot"></span><div><b>${esc(s.name)}</b><div class="small muted">${stageWhen(s)}</div>${s.note ? `<p class="small" style="margin:6px 0 0">${esc(s.note)}</p>` : ''}</div></article>`).join('')}</div>` : ''}
+      ${upNext.length ? `<div class="section-title" style="margin-top:24px"><h2>הבא בתור</h2></div>
+        <div class="st-now">${upNext.map((s) => `<article class="card st-card next"><span class="st-dot"></span><div><b>${esc(s.name)}</b>${s.note ? `<p class="small" style="margin:6px 0 0">${esc(s.note)}</p>` : ''}</div></article>`).join('')}</div>` : ''}
+      <div class="section-title" style="margin-top:24px"><h2>כל השלבים</h2></div>
+      <ol class="st-list card">${tl.map((s, i) => `<li class="st-row ${stageKey(s)}">
+        <span class="st-no">${stageKey(s) === 'done' ? icon('check') : i + 1}</span>
+        <span class="st-name">${esc(s.name)}${s.note && !stageOn(s) ? `<span class="small muted">${esc(s.note)}</span>` : ''}</span>
+        <span class="st-chip ${stageKey(s)}">${s.next && stageKey(s) === 'future' ? 'הבא בתור' : stageWhen(s)}</span>
+      </li>`).join('')}</ol>`,
     mount(root) {
-      root.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => { Store.session.tlView = b.dataset.view; Store.save(); App.go('timeline', { view: b.dataset.view }, true); }));
-      root.querySelectorAll('.tl-photos img').forEach((i) => (i.onclick = () => openPhoto(i.dataset.src)));
-      // On narrow screens the chart scrolls; start it centred on today (or on the current stage).
-      const g = root.querySelector('.gantt') || root.querySelector('.tl-path');
-      const mark = root.querySelector('.gantt-today') || root.querySelector('.tp-step.active, .tp-step.delay');
-      if (g && mark && g.scrollWidth > g.clientWidth) {
-        const gr = g.getBoundingClientRect(), tr = mark.getBoundingClientRect();
-        g.scrollLeft += (tr.left - gr.left) - g.clientWidth / 2;
-      }
+      const b = root.querySelector('#st-edit');
+      if (b) b.onclick = () => stagesBoard();
     },
   };
 };

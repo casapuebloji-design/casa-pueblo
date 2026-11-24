@@ -592,3 +592,12 @@ body.theme-navy { overflow-x: clip; }
 .wk-pk-mark { position: absolute; top: 4px; inset-inline-start: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--terra); color: #fff; display: none; place-items: center; }
 .wk-pk.on .wk-pk-mark { display: grid; }
 .wk-pk-mark .i, .wk-pk-mark svg { width: 13px; height: 13px; }
+
+/* Work stages on the navy (family) theme */
+.theme-navy .st-chip.future { color: #b8c0ca; background: rgba(184, 192, 202, .12); }
+.theme-navy .st-chip.start { color: #9cc4f7; background: rgba(92, 156, 236, .16); }
+.theme-navy .st-chip.active { color: #8fdcab; background: rgba(70, 190, 120, .15); }
+.theme-navy .st-chip.done { color: #f0a85a; background: rgba(240, 168, 90, .14); }
+.stage-steps i.done { background: #f0a85a; }
+.stage-steps i.start { background: #7fb2f0; }
+.stage-steps i.active, .stage-steps i.delay { background: #6fd39a; }

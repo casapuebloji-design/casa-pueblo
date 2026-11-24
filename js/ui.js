@@ -1,6 +1,6 @@
 /* Shared UI helpers: state, formatting, icons, modal, toast, tooltip. */
 
-const STORE_KEY = 'casa-portal-demo-v8';
+const STORE_KEY = 'casa-portal-demo-v9';
 const LIVE_SESSION_KEY = 'casa-live-session';
 
 const Store = {
@@ -184,7 +184,7 @@ function icon(name, cls = '') {
 /* ---------- status language (spec §23) ---------- */
 const STATUS = {
   // timeline
-  done: ['green', 'הסתיים'], active: ['blue', 'בביצוע'], delay: ['red', 'עיכוב'], future: ['gray', 'לא התחיל'],
+  future: ['gray', 'טרם התחיל'], start: ['blue', 'התחלה'], active: ['green', 'בביצוע'], delay: ['green', 'בביצוע'], done: ['yellow', 'הסתיים'],
   // plans
   pending: ['red', 'ממתין לאישורך'], approved: ['green', 'מאושר'], new: ['yellow', 'חדש לעיון'], rejected: ['red', 'נדחה – בתיקון'],
 };
