@@ -64,7 +64,7 @@ function seedData() {
       { name: 'איטום חדרי רחצה', status: 'done', as: '2026-08-06', ae: '2026-08-20', note: '', photos: [] },
       { name: 'ריצוף', status: 'done', as: '2026-08-24', ae: '2026-09-30', note: 'הריצוף בקומה העליונה הושלם.', photos: ['assets/img/j-35.jpg'] },
       { name: 'חיפוי', status: 'active', as: '2026-09-21', ae: null, note: '', photos: [] },
-      { name: 'בניית מחיצות גבס (צד שני)', status: 'active', as: '2026-10-05', ae: null, note: '', photos: [] },
+      { name: 'בניית מחיצות גבס (צד שני)', status: 'start', as: '2026-10-12', ae: null, note: '', photos: [] },
       { name: 'נגרות כללית', status: 'active', as: '2026-09-22', ae: null, note: 'ספריית הסלון בייצור אצל הנגר.', photos: ['assets/img/j-63.jpg'] },
       { name: 'התקנת אלומיניום', status: 'future', as: null, ae: null, note: '', photos: [] },
       { name: 'התקנת דלתות', status: 'future', as: null, ae: null, note: '', photos: [] },
@@ -309,7 +309,7 @@ function stageSync(d) {
   const tl = d.timeline || [];
   const p = d.project;
   p.progress = tl.length ? Math.round(tl.filter((s) => s.status === 'done').length / tl.length * 100) : 0;
-  const act = tl.filter((s) => s.status === 'active' || s.status === 'delay');
+  const act = tl.filter((s) => ['start', 'active', 'delay'].includes(s.status));
   p.stage = act.length ? act.map((s) => s.name).join(', ') : (tl.find((s) => s.status === 'future') || {}).name || (tl.length ? 'הפרויקט הסתיים' : '');
 }
 

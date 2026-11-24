@@ -161,7 +161,7 @@ Pages.home = () => {
   const daysLeft = daysBetween(TODAY, p.handover);
   const latest = d.updates[0];
   const pm = TEAM[p.pm];
-  const actives = d.timeline.filter((s) => s.status === 'active' || s.status === 'delay');
+  const actives = d.timeline.filter((s) => ['start', 'active', 'delay'].includes(s.status));
   const nextStage = d.timeline.find((s) => s.status === 'future');
   const gallery = d.updates.filter((u) => u.stage !== 'לפני').flatMap((u) => u.photos.map((src) => ({ src, title: u.title, sub: fmtDate(u.date) }))).slice(0, 5);
   const wk = latestSentSummary(d);
@@ -692,12 +692,14 @@ Pages.materials = (q) => {
 };
 
 /* ---------- שלבי עבודה ---------- */
-// Three states, actual dates only: not started, in progress (since), done (on). Several stages can run at once.
+// Four states, actual dates only: not started, started (on), in progress (since), done (on). Several stages can run at once.
 function stageKey(s) { return s.status === 'delay' ? 'active' : s.status; }
+function stageOn(s) { return ['start', 'active'].includes(stageKey(s)); } // being worked on now
 function stageWhen(s) {
   const k = stageKey(s);
   if (k === 'done') return s.ae ? `הסתיים ${fmtDate(s.ae)}` : 'הסתיים';
   if (k === 'active') return s.as ? `בביצוע מ־${fmtDate(s.as)}` : 'בביצוע';
+  if (k === 'start') return s.as ? `התחלה ${fmtDate(s.as)}` : 'התחלה';
   return 'טרם התחיל';
 }
 
@@ -706,7 +708,7 @@ Pages.timeline = () => {
   const tl = d.timeline || [];
   if (!tl.length) return { title: 'שלבי עבודה', html: '<div class="page-head"><div><h1>שלבי העבודה</h1></div></div><div class="empty">שלבי העבודה עוד לא הוגדרו</div>', mount() {} };
   const n = (k) => tl.filter((s) => stageKey(s) === k).length;
-  const act = tl.filter((s) => stageKey(s) === 'active');
+  const act = tl.filter(stageOn);
   const pctDone = Math.round(n('done') / tl.length * 100);
   return {
     title: 'שלבי עבודה',
@@ -716,14 +718,14 @@ Pages.timeline = () => {
       <article class="card card-pad st-sum">
         <div class="split"><b>${n('done')} מתוך ${tl.length} שלבים הסתיימו</b><b class="num">${pctDone}%</b></div>
         <div class="progress dark" style="margin:10px 0 14px"><i style="width:${pctDone}%"></i></div>
-        <div class="st-legend"><span class="st-chip done">הסתיים · ${n('done')}</span><span class="st-chip active">בביצוע · ${n('active')}</span><span class="st-chip future">טרם התחיל · ${n('future')}</span></div>
+        <div class="st-legend"><span class="st-chip future">טרם התחיל · ${n('future')}</span><span class="st-chip start">התחלה · ${n('start')}</span><span class="st-chip active">בביצוע · ${n('active')}</span><span class="st-chip done">הסתיים · ${n('done')}</span></div>
       </article>
       ${act.length ? `<div class="section-title" style="margin-top:24px"><h2>בביצוע עכשיו</h2></div>
-        <div class="st-now">${act.map((s) => `<article class="card st-card"><span class="st-dot active"></span><div><b>${esc(s.name)}</b><div class="small muted">${stageWhen(s)}</div>${s.note ? `<p class="small" style="margin:6px 0 0">${esc(s.note)}</p>` : ''}</div></article>`).join('')}</div>` : ''}
+        <div class="st-now">${act.map((s) => `<article class="card st-card ${stageKey(s)}"><span class="st-dot"></span><div><b>${esc(s.name)}</b><div class="small muted">${stageWhen(s)}</div>${s.note ? `<p class="small" style="margin:6px 0 0">${esc(s.note)}</p>` : ''}</div></article>`).join('')}</div>` : ''}
       <div class="section-title" style="margin-top:24px"><h2>כל השלבים</h2></div>
       <ol class="st-list card">${tl.map((s, i) => `<li class="st-row ${stageKey(s)}">
         <span class="st-no">${stageKey(s) === 'done' ? icon('check') : i + 1}</span>
-        <span class="st-name">${esc(s.name)}${s.note && stageKey(s) !== 'active' ? `<span class="small muted">${esc(s.note)}</span>` : ''}</span>
+        <span class="st-name">${esc(s.name)}${s.note && !stageOn(s) ? `<span class="small muted">${esc(s.note)}</span>` : ''}</span>
         <span class="st-chip ${stageKey(s)}">${stageWhen(s)}</span>
       </li>`).join('')}</ol>`,
     mount(root) {

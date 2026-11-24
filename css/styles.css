@@ -898,22 +898,26 @@ fieldset.inv-pays legend { font-size: 13px; font-weight: 600; color: var(--ink-2
 
 .chip-latest .i { width: 13px; height: 13px; margin-inline-end: 2px; }
 
-/* ---------- Work stages: grey = not started, orange = in progress, green = done ---------- */
-:root { --stg-future: #9aa3ad; --stg-active: #d9822b; --stg-done: #2e9d5b; }
+/* ---------- Work stages: grey = not started, blue = started, green = in progress, orange = done ---------- */
+:root { --stg-future: #9aa3ad; --stg-start: #3d7fd1; --stg-active: #2e9d5b; --stg-done: #d9822b; }
 .st-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
 .st-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .st-chip.future { color: #6b7480; background: rgba(154, 163, 173, .16); }
-.st-chip.active { color: #b5621a; background: rgba(217, 130, 43, .14); }
-.st-chip.done { color: #1f7a44; background: rgba(46, 157, 91, .13); }
+.st-chip.start { color: #2563b0; background: rgba(61, 127, 209, .13); }
+.st-chip.active { color: #1f7a44; background: rgba(46, 157, 91, .13); }
+.st-chip.done { color: #b5621a; background: rgba(217, 130, 43, .14); }
 .st-legend { display: flex; flex-wrap: wrap; gap: 8px; }
 .st-now { display: grid; gap: 10px; }
 @media (min-width: 700px) { .st-now { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); } }
 .st-card { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border-inline-start: 4px solid var(--stg-active); }
-.st-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--stg-active); box-shadow: 0 0 0 4px rgba(217, 130, 43, .18); }
+.st-card.start { border-inline-start-color: var(--stg-start); }
+.st-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--stg-active); box-shadow: 0 0 0 4px rgba(46, 157, 91, .18); }
+.st-card.start .st-dot { background: var(--stg-start); box-shadow: 0 0 0 4px rgba(61, 127, 209, .18); }
 .st-list { list-style: none; margin: 0; padding: 4px 0; }
 .st-row { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); }
 .st-row:first-child { border-top: 0; }
 .st-row .st-no { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 2px solid var(--stg-future); color: var(--muted); }
+.st-row.start .st-no { border-color: var(--stg-start); color: var(--stg-start); }
 .st-row.active .st-no { border-color: var(--stg-active); color: var(--stg-active); }
 .st-row.done .st-no { border-color: var(--stg-done); background: var(--stg-done); color: #fff; }
 .st-row .st-no svg { width: 14px; height: 14px; }
@@ -923,13 +927,15 @@ fieldset.inv-pays legend { font-size: 13px; font-weight: 600; color: var(--ink-2
 /* Back Office board */
 .sb-rows { display: grid; gap: 8px; }
 .sb-row { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); border-inline-start: 4px solid var(--stg-future); }
+.sb-row.start { border-inline-start-color: var(--stg-start); }
 .sb-row.active { border-inline-start-color: var(--stg-active); }
 .sb-row.done { border-inline-start-color: var(--stg-done); }
 .sb-name { font-weight: 600; }
 .sb-seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 99px; overflow: hidden; }
-.sb-seg button { border: 0; background: transparent; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink-2, var(--ink)); }
+.sb-seg button { border: 0; background: transparent; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink-2, var(--ink)); }
 .sb-seg button + button { border-inline-start: 1px solid var(--line-2); }
 .sb-seg button.future[aria-pressed="true"] { background: var(--stg-future); color: #fff; }
+.sb-seg button.start[aria-pressed="true"] { background: var(--stg-start); color: #fff; }
 .sb-seg button.active[aria-pressed="true"] { background: var(--stg-active); color: #fff; }
 .sb-seg button.done[aria-pressed="true"] { background: var(--stg-done); color: #fff; }
 .sb-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 12px; }

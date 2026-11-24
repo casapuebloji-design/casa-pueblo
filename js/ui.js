@@ -184,7 +184,7 @@ function icon(name, cls = '') {
 /* ---------- status language (spec §23) ---------- */
 const STATUS = {
   // timeline
-  done: ['green', 'הסתיים'], active: ['yellow', 'בביצוע'], delay: ['yellow', 'בביצוע'], future: ['gray', 'טרם התחיל'],
+  future: ['gray', 'טרם התחיל'], start: ['blue', 'התחלה'], active: ['green', 'בביצוע'], delay: ['green', 'בביצוע'], done: ['yellow', 'הסתיים'],
   // plans
   pending: ['red', 'ממתין לאישורך'], approved: ['green', 'מאושר'], new: ['yellow', 'חדש לעיון'], rejected: ['red', 'נדחה – בתיקון'],
 };
