@@ -61,7 +61,7 @@ function weeklyDraft(d, friday) {
   ];
   const next = [
     ...d.timeline.filter((s) => ['start', 'active', 'delay'].includes(s.status)).map((s) => `ממשיכים ב${s.name}${s.note ? ` (${s.note.split('.')[0]})` : ''}`),
-    ...d.timeline.filter((s) => s.status === 'future').slice(0, 2).map((s) => `בהמשך: ${s.name}`),
+    ...d.timeline.filter((s) => s.next && s.status === 'future').map((s) => `בהמשך: ${s.name}`),
     ...d.tasks.filter((t) => !t.done && t.type === 'approval').map((t) => `מחכה לאישור שלכם: ${t.title.replace(/^אישור /, '')}`),
     ...d.casaMilestones.filter((m) => !m.paid && soon(m.due)).map((m) => `תשלום "${m.name}" ב־${fmtDateShort(m.due)}`),
   ];

@@ -338,7 +338,7 @@ function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: stag
   const rowHtml = (r, i) => `<div class="sb-row ${r.status}" data-i="${i}">
       <div class="sb-name">${esc(r.name)}</div>
       <div class="sb-seg" role="group" aria-label="${esc(r.name)}">${STATES.map(([k, l]) => `<button type="button" class="${k}" data-st="${i}:${k}" aria-pressed="${r.status === k}">${l}</button>`).join('')}</div>
-      ${r.status === 'future' ? '' : `<div class="sb-more">
+      ${r.status === 'future' ? `<label class="sb-next"><input type="checkbox" data-nx="${i}" ${r.next ? 'checked' : ''}><span>הבא בתור</span></label>` : `<div class="sb-more">
         <label><span>התחלה</span><input class="input" type="date" data-d="${i}:as" value="${esc(r.as || '')}"></label>
         ${r.status === 'done' ? `<label><span>סיום</span><input class="input" type="date" data-d="${i}:ae" value="${esc(r.ae || '')}"></label>` : ''}
         ${r.status === 'start' || r.status === 'active' || r.note ? `<label class="sb-note"><span>הערה ללקוח (לא חובה)</span><input class="input" data-n="${i}" value="${esc(r.note || '')}"></label>` : ''}
@@ -353,6 +353,7 @@ function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: stag
     onOpen(el) {
       const box = el.querySelector('#sb-rows');
       const collect = () => {
+        box.querySelectorAll('[data-nx]').forEach((c) => { rows[c.dataset.nx].next = c.checked; });
         box.querySelectorAll('[data-d]').forEach((inp) => { const [i, k] = inp.dataset.d.split(':'); rows[i][k] = inp.value || null; });
         box.querySelectorAll('[data-n]').forEach((inp) => { rows[inp.dataset.n].note = inp.value.trim(); });
       };
@@ -363,7 +364,7 @@ function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: stag
           const [i, k] = b.dataset.st.split(':');
           const r = rows[i];
           r.status = k;
-          if (k === 'future') { r.as = null; r.ae = null; }
+          if (k === 'future') { r.as = null; r.ae = null; } else r.next = false;
           if (k === 'start' || k === 'active') { r.as = r.as || TODAY; r.ae = null; }
           if (k === 'done') { r.as = r.as || TODAY; r.ae = r.ae || TODAY; }
           draw();
@@ -392,7 +393,7 @@ function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: stag
 }
 // What is saved for a stage. ps/pe (planned dates) are no longer used; they are kept equal to the actual dates.
 function stageRecord(r) {
-  return { name: r.name, status: r.status, as: r.as || null, ae: r.ae || null, note: r.note || '', photos: r.photos || [], ps: r.as || r.ps || TODAY, pe: r.ae || r.pe || TODAY };
+  return { name: r.name, status: r.status, as: r.as || null, ae: r.ae || null, note: r.note || '', photos: r.photos || [], ...(r.next && r.status === 'future' ? { next: true } : {}), ps: r.as || r.ps || TODAY, pe: r.ae || r.pe || TODAY };
 }
 
 // Which stages this project has: Casa Pueblo's list plus any added by hand. Unticking removes a stage.

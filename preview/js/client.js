@@ -162,7 +162,7 @@ Pages.home = () => {
   const latest = d.updates[0];
   const pm = TEAM[p.pm];
   const actives = d.timeline.filter((s) => ['start', 'active', 'delay'].includes(s.status));
-  const nextStage = d.timeline.find((s) => s.status === 'future');
+  const nextStages = d.timeline.filter((s) => s.next && s.status === 'future');
   const gallery = d.updates.filter((u) => u.stage !== 'לפני').flatMap((u) => u.photos.map((src) => ({ src, title: u.title, sub: fmtDate(u.date) }))).slice(0, 5);
   const wk = latestSentSummary(d);
   const sinceUpdate = daysBetween(wk ? wk.week : p.weekly.updated, TODAY);
@@ -202,7 +202,7 @@ Pages.home = () => {
           <button class="link-btn small" id="wk-history" style="align-self:flex-start;margin-top:10px">לסיכומים הקודמים</button>` : `<blockquote>${esc(p.weekly.text)}</blockquote>`}
           <div class="highlights">
             ${actives.map((s) => `<span>בביצוע: <b>${esc(s.name)}</b></span>`).join('')}
-            ${nextStage ? `<span>הבא בתור: <b>${esc(nextStage.name)}</b></span>` : ''}
+            ${nextStages.length ? `<span>הבא בתור: <b>${esc(nextStages.map((s) => s.name).join(', '))}</b></span>` : ''}
           </div>
           <div class="sign">
             <span class="avatar navy lg">${initials(pm.name)}</span>
@@ -709,6 +709,7 @@ Pages.timeline = () => {
   if (!tl.length) return { title: 'שלבי עבודה', html: '<div class="page-head"><div><h1>שלבי העבודה</h1></div></div><div class="empty">שלבי העבודה עוד לא הוגדרו</div>', mount() {} };
   const n = (k) => tl.filter((s) => stageKey(s) === k).length;
   const act = tl.filter(stageOn);
+  const upNext = tl.filter((s) => s.next && stageKey(s) === 'future');
   const pctDone = Math.round(n('done') / tl.length * 100);
   return {
     title: 'שלבי עבודה',
@@ -722,11 +723,13 @@ Pages.timeline = () => {
       </article>
       ${act.length ? `<div class="section-title" style="margin-top:24px"><h2>בביצוע עכשיו</h2></div>
         <div class="st-now">${act.map((s) => `<article class="card st-card ${stageKey(s)}"><span class="st-dot"></span><div><b>${esc(s.name)}</b><div class="small muted">${stageWhen(s)}</div>${s.note ? `<p class="small" style="margin:6px 0 0">${esc(s.note)}</p>` : ''}</div></article>`).join('')}</div>` : ''}
+      ${upNext.length ? `<div class="section-title" style="margin-top:24px"><h2>הבא בתור</h2></div>
+        <div class="st-now">${upNext.map((s) => `<article class="card st-card next"><span class="st-dot"></span><div><b>${esc(s.name)}</b>${s.note ? `<p class="small" style="margin:6px 0 0">${esc(s.note)}</p>` : ''}</div></article>`).join('')}</div>` : ''}
       <div class="section-title" style="margin-top:24px"><h2>כל השלבים</h2></div>
       <ol class="st-list card">${tl.map((s, i) => `<li class="st-row ${stageKey(s)}">
         <span class="st-no">${stageKey(s) === 'done' ? icon('check') : i + 1}</span>
         <span class="st-name">${esc(s.name)}${s.note && !stageOn(s) ? `<span class="small muted">${esc(s.note)}</span>` : ''}</span>
-        <span class="st-chip ${stageKey(s)}">${stageWhen(s)}</span>
+        <span class="st-chip ${stageKey(s)}">${s.next && stageKey(s) === 'future' ? 'הבא בתור' : stageWhen(s)}</span>
       </li>`).join('')}</ol>`,
     mount(root) {
       const b = root.querySelector('#st-edit');
