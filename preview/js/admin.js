@@ -333,7 +333,7 @@ function paymentsBoard() {
 
 /* ---------- Work stages: what is being done in the house, in real time ---------- */
 // Each stage: not started / started (date) / in progress / done (end date). Several can run at once.
-function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: s.status === 'delay' ? 'active' : s.status }))) {
+function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: stageStatus(s) }))) {
   const STATES = [['future', 'טרם התחיל'], ['start', 'התחלה'], ['active', 'בביצוע'], ['done', 'הסתיים']];
   const rowHtml = (r, i) => `<div class="sb-row ${r.status}" data-i="${i}">
       <div class="sb-name">${esc(r.name)}</div>
