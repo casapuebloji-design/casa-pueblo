@@ -199,6 +199,7 @@ Pages.home = () => {
             <div><div class="wk-h">מה עשינו השבוע</div>${bulletList(wk.done)}</div>
             <div><div class="wk-h">מה הלאה</div>${bulletList(wk.next)}</div>
           </div>
+          ${weeklyGallery(wk)}
           <button class="link-btn small" id="wk-history" style="align-self:flex-start;margin-top:10px">לסיכומים הקודמים</button>` : `<blockquote>${esc(p.weekly.text)}</blockquote>`}
           <div class="highlights">
             ${active ? `<span>בביצוע: <b>${esc(active.name)}</b></span>` : ''}
@@ -267,6 +268,8 @@ Pages.home = () => {
       root.querySelectorAll('[data-lbg]').forEach((b) => (b.onclick = () => openLightbox(gallery, Number(b.dataset.lbg))));
       const wk = root.querySelector('[data-lbhome]');
       if (wk) wk.onclick = () => openLightbox(projectAlbum(), 0);
+      const sent = latestSentSummary(Store.data);
+      if (sent) bindWeeklyGallery(root, sent);
       const wh = root.querySelector('#wk-history');
       if (wh) wh.onclick = openWeeklyHistory;
     },
@@ -849,8 +852,9 @@ Pages.photos = (q) => {
         <div class="when"><div class="d">${dt.getDate()}</div><div class="m">${HEB_MONTHS[dt.getMonth()]} ${dt.getFullYear()}</div><div class="st">${stagesOf(u).map((s) => pill(s === 'לפני' ? 'gray' : 'blue', s)).join(' ')}</div></div>
         <div>
           <h3>${esc(u.title)}</h3>
-          <p>${esc(u.desc)}</p>
-          ${App.isStaffView() ? `<button class="link-btn small" data-addph="${esc(u.id)}" style="margin-bottom:10px">${icon('plus')}הוספת תמונות לעדכון הזה</button>` : ''}
+          ${u.desc ? `<p>${esc(u.desc)}</p>` : ''}
+          ${(u.log || []).filter((e) => e.text).map((e) => `<p class="jlog"><span class="jlog-d">${fmtDateShort(e.date)}</span>${esc(e.text)}</p>`).join('')}
+          ${App.isStaffView() ? `<div class="jentry-actions"><button class="link-btn small" data-addph="${esc(u.id)}">${icon('plus')}הוספת תמונות וטקסט</button><button class="link-btn small" data-edtxt="${esc(u.id)}">${icon('edit')}עריכת הטקסטים</button></div>` : ''}
           <div class="mosaic" data-n="${Math.min(u.photos.length, 5)}">${u.photos.map((src) => tile(u, src)).join('')}</div>
         </div>
       </article>`;
@@ -896,6 +900,7 @@ Pages.photos = (q) => {
       root.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => App.go('photos', { view: b.dataset.view })));
       root.querySelector('#ph-up').onclick = () => ACTIONS.photos();
       root.querySelectorAll('[data-addph]').forEach((b) => (b.onclick = () => ACTIONS.photos(b.dataset.addph)));
+      root.querySelectorAll('[data-edtxt]').forEach((b) => (b.onclick = () => updateTextForm(b.dataset.edtxt)));
       root.querySelectorAll('[data-stage]').forEach((b) => (b.onclick = () => App.go('photos', { stage: b.dataset.stage })));
       root.querySelectorAll('[data-ba]').forEach((b) => (b.onclick = () => App.go('photos', { view: q.view, stage: q.stage, ba: b.dataset.ba }, true)));
       root.querySelectorAll('[data-lb]').forEach((b) => (b.onclick = () => openLightbox(all, Number(b.dataset.lb))));

@@ -333,11 +333,13 @@ function paymentsBoard() {
 }
 
 // Photo upload form. target = null starts a new update; an existing update gets the new photos added to it
-// (e.g. one "demolition, week of ..." entry that grows during the week).
+// (e.g. one "demolition, week of ..." entry that grows during the week). Each addition can carry its own text,
+// kept with its date and photos in u.log, so the weekly summary knows what was done and shown that week.
 function photoForm(target) {
   const fields = target
     ? [
         { id: 'stages', label: 'שלבי בנייה (אפשר להוסיף)', type: 'checks', options: PHOTO_STAGES, value: stagesOf(target) },
+        { id: 'note', label: 'מה נעשה היום (יופיע עם התמונות האלה, עם התאריך)', type: 'textarea', placeholder: 'למשל: סיימנו את צנרת המים בחדר הרחצה הראשי' },
         { id: 'files', label: 'תמונות וסרטונים להוספה (מהנייד או מהמחשב)', type: 'file', multiple: true, accept: 'image/*,video/*' },
       ]
     : [
@@ -355,7 +357,7 @@ function photoForm(target) {
       if (!v.stages.length) return 'צריך לסמן לפחות שלב בנייה אחד, כדי שהתמונות יופיעו בקטגוריה הנכונה.';
       if (!Store.live) return '';
       const files = [...v.files];
-      if (!files.length) return 'צריך לבחור לפחות תמונה אחת';
+      if (!files.length && !(target && v.note)) return target ? 'צריך לבחור תמונות או לכתוב מה נעשה' : 'צריך לבחור לפחות תמונה אחת';
       if (files.length > MAX_PHOTOS) return `אפשר עד ${MAX_PHOTOS} תמונות בכל העלאה, ונבחרו ${files.length}. מעלים בשתי פעמים.`;
       const heic = files.filter((f) => /^image\/hei[cf]$/i.test(f.type) || /\.hei[cf]$/i.test(f.name));
       if (heic.length) return `${heic.length} מהתמונות בפורמט HEIC (מאייפון), והדפדפן לא יציג אותן. מעלים אותן ישר מהנייד, שממיר ל־JPG לבד, או ממירים ל־JPG לפני ההעלאה.`;
@@ -366,11 +368,11 @@ function photoForm(target) {
     async onSave(v) { return withUpload(async () => {
       let photos = [];
       if (Store.live) {
-        if (!v.files.length) return 'צריך לבחור לפחות תמונה אחת';
+        if (!v.files.length && !(target && v.note)) return 'צריך לבחור לפחות תמונה אחת';
         for (const f of [...v.files].slice(0, MAX_PHOTOS)) photos.push(await storeFile(await shrinkImage(f)));
       } else {
         for (const f of [...v.files].slice(0, 6)) { const src = await readImage(f); if (src) photos.push(src); }
-        if (!photos.length) photos = ['assets/img/j-28.jpg', 'assets/img/j-31.jpg'];
+        if (!photos.length && !(target && v.note)) photos = ['assets/img/j-28.jpg', 'assets/img/j-31.jpg'];
       }
       // Look the update up again: the project may have been reloaded while the photos uploaded.
       const u = target && Store.data.updates.find((x) => x.id === target.id);
@@ -380,16 +382,45 @@ function photoForm(target) {
         u.stages = v.stages;
         u.stage = v.stages[0];
         u.edited = TODAY;
-        Store.log(`הוסיף ${photos.length} תמונות לעדכון: ${u.title}`, TEAM.pm.name);
-        Store.notify(`נוספו ${photos.length} תמונות לעדכון "${u.title}"`, 'photos');
+        (u.log || (u.log = [])).push({ date: TODAY, text: v.note || '', photos });
+        Store.log(photos.length ? `הוסיף ${photos.length} תמונות לעדכון: ${u.title}` : `הוסיף טקסט לעדכון: ${u.title}`, TEAM.pm.name);
+        Store.notify(photos.length ? `נוספו ${photos.length} תמונות לעדכון "${u.title}"` : `נוסף עדכון ל"${u.title}"`, 'photos');
       } else {
         Store.data.updates.unshift({ id: 'u' + Date.now(), date: TODAY, title: v.title, stage: v.stages[0], stages: v.stages, desc: v.desc, photos });
         Store.log(`העלה ${photos.length} תמונות: ${v.title}`, TEAM.pm.name);
         Store.notify(`נוספו ${photos.length} תמונות חדשות מהפרויקט`, 'photos');
       }
       Store.save();
-      return u ? `${photos.length} התמונות נוספו לעדכון "${u.title}"` : 'התמונות פורסמו ביומן הפרויקט';
+      return u ? (photos.length ? `${photos.length} התמונות נוספו לעדכון "${u.title}"` : `הטקסט נוסף לעדכון "${u.title}"`) : 'התמונות פורסמו ביומן הפרויקט';
     }); },
+  });
+}
+
+// Edit the texts of a photo update: title, description and the text of each addition.
+function updateTextForm(id) {
+  const u = Store.data.updates.find((x) => x.id === id);
+  if (!u) return;
+  const log = u.log || [];
+  formModal({
+    title: 'עריכת הטקסטים של העדכון',
+    intro: `${fmtDate(u.date)} · ${u.photos.length} תמונות`,
+    fields: [
+      { id: 'title', label: 'כותרת', value: u.title, required: true },
+      { id: 'desc', label: `תיאור (מ־${fmtDate(u.date)})`, type: 'textarea', value: u.desc || '' },
+      ...log.map((e, i) => ({ id: 'log' + i, label: `מה נעשה ב־${fmtDate(e.date)}${e.photos && e.photos.length ? ` (${e.photos.length} תמונות)` : ''}`, type: 'textarea', value: e.text || '' })),
+    ],
+    onSave(v) {
+      const cur = Store.data.updates.find((x) => x.id === id); // the project may have been reloaded meanwhile
+      if (!cur) return 'העדכון לא נמצא';
+      cur.title = v.title;
+      cur.desc = v.desc;
+      (cur.log || []).forEach((e, i) => { if ('log' + i in v) e.text = v['log' + i]; });
+      cur.log = (cur.log || []).filter((e) => e.text || (e.photos && e.photos.length)); // an empty text-only entry goes away
+      cur.edited = TODAY;
+      Store.log(`ערך את הטקסטים של העדכון: ${cur.title}`, TEAM.pm.name);
+      Store.save();
+      return 'הטקסטים נשמרו';
+    },
   });
 }
 
