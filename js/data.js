@@ -304,6 +304,18 @@ const WORK_STAGES = ['פירוקים והריסות', 'בניית מחיצות �
   'התקנת כלים סניטריים', 'דלת ממ"ד', 'דלת כניסה', 'פיתוח וגינה', 'התקנת דק', 'נקיון', 'מסירה', 'תיקונים'];
 function newStage(name) { return { name, status: 'future', as: null, ae: null, note: '', photos: [] }; }
 
+// What a stage shows now. "התחלה" (started) is blue until the end of the work week it started in (Friday),
+// then it shows as "בביצוע" (in progress) by itself. An old "delay" shows as in progress.
+function stageStatus(s) {
+  if (s.status === 'delay') return 'active';
+  if (s.status === 'start' && s.as) {
+    const fri = parseDate(s.as);
+    fri.setDate(fri.getDate() + ((5 - fri.getDay() + 7) % 7));
+    if (parseDate(TODAY) > fri) return 'active';
+  }
+  return s.status;
+}
+
 // The project's progress and "current stage" follow the stages: done out of all, and whatever is in progress now.
 function stageSync(d) {
   const tl = d.timeline || [];

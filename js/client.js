@@ -180,7 +180,7 @@ Pages.home = () => {
             <div>
               <div class="lbl">${actives.length > 1 ? 'בביצוע עכשיו' : 'שלב נוכחי'}</div>
               <div class="val">${actives.length > 2 ? `${actives.length} שלבים בביצוע` : esc(p.stage)}</div>
-              <div class="stage-steps" aria-hidden="true">${d.timeline.map((s) => `<i class="${s.status}" title="${esc(s.name)}"></i>`).join('')}</div>
+              <div class="stage-steps" aria-hidden="true">${d.timeline.map((s) => `<i class="${stageStatus(s)}" title="${esc(s.name)}"></i>`).join('')}</div>
               ${d.timeline.length ? `<div class="stage-names"><span>${esc(d.timeline[0].name)}</span><span>${esc(d.timeline[d.timeline.length - 1].name)}</span></div>` : ''}
             </div>
           </div>
@@ -301,7 +301,7 @@ Pages.project = () => {
             <div class="card-head"><h3>התקדמות לפי שלבים</h3><a class="link-btn small" href="#/timeline">לשלבי העבודה</a></div>
             <div class="progress dark" style="height:10px"><i style="width:${p.progress}%"></i></div>
             <div class="legend-status" style="margin-top:12px">
-              ${d.timeline.map((s) => `<span class="small">${statusPill(s.status).replace(STATUS[s.status][1], esc(s.name))}</span>`).join('')}
+              ${d.timeline.map((s) => `<span class="small">${statusPill(stageStatus(s)).replace(STATUS[stageStatus(s)][1], esc(s.name))}</span>`).join('')}
             </div>
           </article>
           <article class="card">
@@ -693,7 +693,7 @@ Pages.materials = (q) => {
 
 /* ---------- שלבי עבודה ---------- */
 // Four states, actual dates only: not started, started (on), in progress (since), done (on). Several stages can run at once.
-function stageKey(s) { return s.status === 'delay' ? 'active' : s.status; }
+function stageKey(s) { return stageStatus(s); }
 function stageOn(s) { return ['start', 'active'].includes(stageKey(s)); } // being worked on now
 function stageWhen(s) {
   const k = stageKey(s);
