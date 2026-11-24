@@ -333,11 +333,13 @@ function paymentsBoard() {
 }
 
 // Photo upload form. target = null starts a new update; an existing update gets the new photos added to it
-// (e.g. one "demolition, week of ..." entry that grows during the week).
+// (e.g. one "demolition, week of ..." entry that grows during the week). Each addition can carry its own text,
+// kept with its date and photos in u.log, so the weekly summary knows what was done and shown that week.
 function photoForm(target) {
   const fields = target
     ? [
         { id: 'stages', label: 'שלבי בנייה (אפשר להוסיף)', type: 'checks', options: PHOTO_STAGES, value: stagesOf(target) },
+        { id: 'note', label: 'מה נעשה היום (יופיע עם התמונות האלה, עם התאריך)', type: 'textarea', placeholder: 'למשל: סיימנו את צנרת המים בחדר הרחצה הראשי' },
         { id: 'files', label: 'תמונות וסרטונים להוספה (מהנייד או מהמחשב)', type: 'file', multiple: true, accept: 'image/*,video/*' },
       ]
     : [
@@ -355,7 +357,7 @@ function photoForm(target) {
       if (!v.stages.length) return 'צריך לסמן לפחות שלב בנייה אחד, כדי שהתמונות יופיעו בקטגוריה הנכונה.';
       if (!Store.live) return '';
       const files = [...v.files];
-      if (!files.length) return 'צריך לבחור לפחות תמונה אחת';
+      if (!files.length && !(target && v.note)) return target ? 'צריך לבחור תמונות או לכתוב מה נעשה' : 'צריך לבחור לפחות תמונה אחת';
       if (files.length > MAX_PHOTOS) return `אפשר עד ${MAX_PHOTOS} תמונות בכל העלאה, ונבחרו ${files.length}. מעלים בשתי פעמים.`;
       const heic = files.filter((f) => /^image\/hei[cf]$/i.test(f.type) || /\.hei[cf]$/i.test(f.name));
       if (heic.length) return `${heic.length} מהתמונות בפורמט HEIC (מאייפון), והדפדפן לא יציג אותן. מעלים אותן ישר מהנייד, שממיר ל־JPG לבד, או ממירים ל־JPG לפני ההעלאה.`;
@@ -366,11 +368,11 @@ function photoForm(target) {
     async onSave(v) { return withUpload(async () => {
       let photos = [];
       if (Store.live) {
-        if (!v.files.length) return 'צריך לבחור לפחות תמונה אחת';
+        if (!v.files.length && !(target && v.note)) return 'צריך לבחור לפחות תמונה אחת';
         for (const f of [...v.files].slice(0, MAX_PHOTOS)) photos.push(await storeFile(await shrinkImage(f)));
       } else {
         for (const f of [...v.files].slice(0, 6)) { const src = await readImage(f); if (src) photos.push(src); }
-        if (!photos.length) photos = ['assets/img/j-28.jpg', 'assets/img/j-31.jpg'];
+        if (!photos.length && !(target && v.note)) photos = ['assets/img/j-28.jpg', 'assets/img/j-31.jpg'];
       }
       // Look the update up again: the project may have been reloaded while the photos uploaded.
       const u = target && Store.data.updates.find((x) => x.id === target.id);
@@ -380,16 +382,45 @@ function photoForm(target) {
         u.stages = v.stages;
         u.stage = v.stages[0];
         u.edited = TODAY;
-        Store.log(`הוסיף ${photos.length} תמונות לעדכון: ${u.title}`, TEAM.pm.name);
-        Store.notify(`נוספו ${photos.length} תמונות לעדכון "${u.title}"`, 'photos');
+        (u.log || (u.log = [])).push({ date: TODAY, text: v.note || '', photos });
+        Store.log(photos.length ? `הוסיף ${photos.length} תמונות לעדכון: ${u.title}` : `הוסיף טקסט לעדכון: ${u.title}`, TEAM.pm.name);
+        Store.notify(photos.length ? `נוספו ${photos.length} תמונות לעדכון "${u.title}"` : `נוסף עדכון ל"${u.title}"`, 'photos');
       } else {
         Store.data.updates.unshift({ id: 'u' + Date.now(), date: TODAY, title: v.title, stage: v.stages[0], stages: v.stages, desc: v.desc, photos });
         Store.log(`העלה ${photos.length} תמונות: ${v.title}`, TEAM.pm.name);
         Store.notify(`נוספו ${photos.length} תמונות חדשות מהפרויקט`, 'photos');
       }
       Store.save();
-      return u ? `${photos.length} התמונות נוספו לעדכון "${u.title}"` : 'התמונות פורסמו ביומן הפרויקט';
+      return u ? (photos.length ? `${photos.length} התמונות נוספו לעדכון "${u.title}"` : `הטקסט נוסף לעדכון "${u.title}"`) : 'התמונות פורסמו ביומן הפרויקט';
     }); },
+  });
+}
+
+// Edit the texts of a photo update: title, description and the text of each addition.
+function updateTextForm(id) {
+  const u = Store.data.updates.find((x) => x.id === id);
+  if (!u) return;
+  const log = u.log || [];
+  formModal({
+    title: 'עריכת הטקסטים של העדכון',
+    intro: `${fmtDate(u.date)} · ${u.photos.length} תמונות`,
+    fields: [
+      { id: 'title', label: 'כותרת', value: u.title, required: true },
+      { id: 'desc', label: `תיאור (מ־${fmtDate(u.date)})`, type: 'textarea', value: u.desc || '' },
+      ...log.map((e, i) => ({ id: 'log' + i, label: `מה נעשה ב־${fmtDate(e.date)}${e.photos && e.photos.length ? ` (${e.photos.length} תמונות)` : ''}`, type: 'textarea', value: e.text || '' })),
+    ],
+    onSave(v) {
+      const cur = Store.data.updates.find((x) => x.id === id); // the project may have been reloaded meanwhile
+      if (!cur) return 'העדכון לא נמצא';
+      cur.title = v.title;
+      cur.desc = v.desc;
+      (cur.log || []).forEach((e, i) => { if ('log' + i in v) e.text = v['log' + i]; });
+      cur.log = (cur.log || []).filter((e) => e.text || (e.photos && e.photos.length)); // an empty text-only entry goes away
+      cur.edited = TODAY;
+      Store.log(`ערך את הטקסטים של העדכון: ${cur.title}`, TEAM.pm.name);
+      Store.save();
+      return 'הטקסטים נשמרו';
+    },
   });
 }
 
@@ -520,11 +551,15 @@ const ACTIONS = {
     });
   },
   plan() {
+    const plans = Store.data.plans;
     formModal({
-      title: 'העלאת תכנית חדשה',
+      title: 'העלאת תכנית',
       fields: [
         { id: 'cat', label: 'קטגוריה', type: 'select', options: planCategories(Store.data) },
         { id: 'title', label: 'שם התכנית', required: true },
+        // A newer plan takes the old one's place in "הכי מעודכן"; the old file stays, as an earlier version.
+        ...(plans.length ? [{ id: 'replaces', label: 'האם היא מחליפה תכנית קיימת?', type: 'select', value: '',
+          options: [['', 'לא, זו תכנית חדשה'], ...plans.map((p) => [p.id, `מחליפה את: ${p.cat} · ${p.title} (V${p.versions[0].v})`])] }] : []),
         { id: 'file', label: 'קובץ', type: 'file', accept: '.pdf,.dwg,.dwf,.xls,.xlsx,image/*' },
         { id: 'approve', label: 'לבקש אישור מהלקוח', type: 'checkbox', value: true },
       ],
@@ -532,6 +567,23 @@ const ACTIONS = {
       onSave(v) { return withUpload(async () => {
         const f = v.file[0];
         const path = await storeFile(f);
+        const old = v.replaces && Store.data.plans.find((x) => x.id === v.replaces);
+        if (old) {
+          const nv = old.versions[0].v + 1;
+          old.versions.forEach((x) => { if (!x.title) x.title = old.title; }); // the replaced files keep their own name
+          old.versions.unshift({ v: nv, date: TODAY, by: uploaderName(), title: v.title, note: old.title !== v.title ? `מחליפה את "${old.title}"` : 'גרסה מעודכנת', path,
+            file: f ? f.name.split('.').pop().toUpperCase().slice(0, 4) : old.versions[0].file, size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—' });
+          old.title = v.title;
+          old.cat = v.cat;
+          old.status = v.approve ? 'pending' : 'new';
+          old.exec = 'draft'; // a new version waits for Jorge's approval for execution
+          Store.data.tasks.forEach((t) => { if (t.ref && t.ref.id === old.id && t.type === 'approval') t.done = true; });
+          if (v.approve) Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור ${v.title} V${nv}`, sub: `גרסה מעודכנת · ${fmtDateShort(TODAY)}`, ref: { page: 'plans', id: old.id }, level: 'red', done: false });
+          Store.log(`העלה תכנית מעודכנת: ${v.title} (V${nv})${v.approve ? ' וביקש אישור' : ''}`, TEAM.architect.name);
+          Store.notify(`עודכנה תכנית: ${v.title}${v.approve ? ' – נדרש אישורך' : ''}`, 'plans');
+          Store.save();
+          return 'התכנית המעודכנת הועלתה. הקודמת עברה ל"הכל", כגרסה קודמת.';
+        }
         const id = 'pl' + Date.now();
         Store.data.plans.unshift({ id, cat: v.cat, title: v.title, status: v.approve ? 'pending' : 'new', exec: 'draft', versions: [{ v: 1, date: TODAY, by: uploaderName(), note: 'גרסה ראשונה', path, file: f ? f.name.split('.').pop().toUpperCase().slice(0, 4) : 'PDF', size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—' }] });
         if (v.approve) Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור ${v.title} V1`, sub: `ביקשה ${TEAM.architect.name} · ${fmtDateShort(TODAY)}`, ref: { page: 'plans', id }, level: 'red', done: false });
@@ -545,7 +597,7 @@ const ACTIONS = {
   version() {
     const plans = Store.data.plans;
     formModal({
-      title: 'גרסה חדשה לתכנית', intro: 'הגרסה הקודמת נשמרת בהיסטוריה ולא נמחקת.',
+      title: 'גרסה חדשה לתכנית', intro: 'הגרסה החדשה תופיע ב"הכי מעודכן", והקודמת עוברת ל"הכל" ולא נמחקת.',
       fields: [
         { id: 'id', label: 'תכנית', type: 'select', options: plans.map((p) => [p.id, `${p.cat} · ${p.title} (V${p.versions[0].v})`]) },
         { id: 'note', label: 'מה השתנה', type: 'textarea', required: true },
@@ -558,7 +610,8 @@ const ACTIONS = {
         const nv = p.versions[0].v + 1;
         const f = v.file[0];
         const path = await storeFile(f);
-        p.versions.unshift({ v: nv, date: TODAY, by: uploaderName(), note: v.note, path,
+        p.versions.forEach((x) => { if (!x.title) x.title = p.title; });
+        p.versions.unshift({ v: nv, title: p.title, date: TODAY, by: uploaderName(), note: v.note, path,
           file: f ? f.name.split('.').pop().toUpperCase().slice(0, 4) : p.versions[0].file, size: f ? (f.size / 1048576).toFixed(1) + 'MB' : p.versions[0].size });
         p.status = v.approve ? 'pending' : 'new';
         p.exec = 'draft'; // a new version waits for Jorge's approval for execution

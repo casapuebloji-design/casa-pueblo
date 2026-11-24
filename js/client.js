@@ -199,6 +199,7 @@ Pages.home = () => {
             <div><div class="wk-h">מה עשינו השבוע</div>${bulletList(wk.done)}</div>
             <div><div class="wk-h">מה הלאה</div>${bulletList(wk.next)}</div>
           </div>
+          ${weeklyGallery(wk)}
           <button class="link-btn small" id="wk-history" style="align-self:flex-start;margin-top:10px">לסיכומים הקודמים</button>` : `<blockquote>${esc(p.weekly.text)}</blockquote>`}
           <div class="highlights">
             ${active ? `<span>בביצוע: <b>${esc(active.name)}</b></span>` : ''}
@@ -267,6 +268,8 @@ Pages.home = () => {
       root.querySelectorAll('[data-lbg]').forEach((b) => (b.onclick = () => openLightbox(gallery, Number(b.dataset.lbg))));
       const wk = root.querySelector('[data-lbhome]');
       if (wk) wk.onclick = () => openLightbox(projectAlbum(), 0);
+      const sent = latestSentSummary(Store.data);
+      if (sent) bindWeeklyGallery(root, sent);
       const wh = root.querySelector('#wk-history');
       if (wh) wh.onclick = openWeeklyHistory;
     },
@@ -369,7 +372,7 @@ function openPlan(id, vi = 0) {
   Store.save();
   const approver = canApprovePlans();
   openModal({
-    title: `${plan.title} · V${v.v}`,
+    title: `${v.title || plan.title} · V${v.v}`,
     wide: true,
     body: `
       <div class="split" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -441,25 +444,29 @@ function addPlanCategoryFlow() {
   });
 }
 
+// "הכי מעודכן" (the default) shows only the current version of each plan. A plan replaced by a newer one
+// keeps its file as an earlier version, shown under "הכל" and in its own category.
 Pages.plans = (q) => {
   const d = Store.data;
   const cats = planCategories(d);
-  const cat = q.cat || 'הכול';
-  const inCat = (p) => cat === 'הכול' || p.cat === cat;
+  const cat = q.cat || 'latest';
+  const inCat = (p) => cat === 'latest' || cat === 'הכול' || p.cat === cat;
   const list = d.plans.filter(inCat)
     .sort((a, b) => (a.exec === 'approved' ? 0 : 1) - (b.exec === 'approved' ? 0 : 1) || b.versions[0].date.localeCompare(a.versions[0].date));
-  const older = d.plans.filter(inCat).flatMap((p) => p.versions.slice(1).map((v, i) => ({ p, v, i: i + 1 }))).sort((a, b) => b.v.date.localeCompare(a.v.date));
+  const older = cat === 'latest' ? [] : d.plans.filter(inCat).flatMap((p) => p.versions.slice(1).map((v, i) => ({ p, v, i: i + 1 }))).sort((a, b) => b.v.date.localeCompare(a.v.date));
+  const nOld = d.plans.reduce((n, p) => n + p.versions.length - 1, 0);
   const pending = d.plans.filter((p) => p.status === 'pending').length;
   const approver = canApprovePlans();
   return {
     title: 'תכניות',
     html: `
-      <div class="page-head"><div><h1>תכניות</h1><p>התכניות העדכניות למעלה, והגרסאות הקודמות מתחת</p></div>
+      <div class="page-head"><div><h1>תכניות</h1><p>${cat === 'latest' ? 'רק התכניות המעודכנות ביותר. גרסאות שהוחלפו נמצאות ב"הכל".' : 'התכניות העדכניות למעלה, והגרסאות הקודמות מתחת'}</p></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${pending ? pill('red', `${pending} ממתינות לאישורכם`) : ''}
           ${d.plans.length ? `<button class="btn btn-ghost" id="pl-ver">${icon('layers')}גרסה חדשה</button>` : ''}
           <button class="btn btn-accent" id="pl-up">${icon('upload')}העלאת תכנית</button></div></div>
       <div class="chips" role="group" aria-label="סינון לפי קטגוריה">
-        ${['הכול', ...cats].map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c === 'הכול' ? 'הכל' : c)}<span class="n">${c === 'הכול' ? d.plans.length : d.plans.filter((p) => p.cat === c).length}</span></button>`).join('')}
+        <button class="chip chip-latest" aria-pressed="${cat === 'latest'}" data-cat="latest">${icon('check', 'xs')}הכי מעודכן<span class="n">${d.plans.length}</span></button>
+        ${['הכול', ...cats].map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c === 'הכול' ? 'הכל' : c)}<span class="n">${c === 'הכול' ? d.plans.length + nOld : d.plans.filter((p) => p.cat === c).length}</span></button>`).join('')}
         <button class="chip" id="pc-add">${icon('plus', 'xs')} קטגוריה</button>
       </div>
       <div class="card">
@@ -482,7 +489,7 @@ Pages.plans = (q) => {
       <div class="card older-plans"><ul class="rows">
         ${older.map(({ p, v, i }) => `<li class="row clickable compact" data-old="${p.id}" data-i="${i}">
           ${fileIco(v.file)}
-          <div class="main-col"><div class="title">${esc(p.title)} · גרסה ${v.v}</div><div class="sub">${esc(p.cat)} · ${fmtDate(v.date)}${v.note ? ` · ${esc(v.note)}` : ''}</div></div>
+          <div class="main-col"><div class="title">${esc(v.title || p.title)} · גרסה ${v.v}</div><div class="sub">${esc(p.cat)} · ${fmtDate(v.date)}${v.note ? ` · ${esc(v.note)}` : ''}</div></div>
           <div class="end">${pill('gray', 'הוחלפה')}</div>
         </li>`).join('')}
       </ul></div>` : ''}`,
@@ -849,8 +856,9 @@ Pages.photos = (q) => {
         <div class="when"><div class="d">${dt.getDate()}</div><div class="m">${HEB_MONTHS[dt.getMonth()]} ${dt.getFullYear()}</div><div class="st">${stagesOf(u).map((s) => pill(s === 'לפני' ? 'gray' : 'blue', s)).join(' ')}</div></div>
         <div>
           <h3>${esc(u.title)}</h3>
-          <p>${esc(u.desc)}</p>
-          ${App.isStaffView() ? `<button class="link-btn small" data-addph="${esc(u.id)}" style="margin-bottom:10px">${icon('plus')}הוספת תמונות לעדכון הזה</button>` : ''}
+          ${u.desc ? `<p>${esc(u.desc)}</p>` : ''}
+          ${(u.log || []).filter((e) => e.text).map((e) => `<p class="jlog"><span class="jlog-d">${fmtDateShort(e.date)}</span>${esc(e.text)}</p>`).join('')}
+          ${App.isStaffView() ? `<div class="jentry-actions"><button class="link-btn small" data-addph="${esc(u.id)}">${icon('plus')}הוספת תמונות וטקסט</button><button class="link-btn small" data-edtxt="${esc(u.id)}">${icon('edit')}עריכת הטקסטים</button></div>` : ''}
           <div class="mosaic" data-n="${Math.min(u.photos.length, 5)}">${u.photos.map((src) => tile(u, src)).join('')}</div>
         </div>
       </article>`;
@@ -896,6 +904,7 @@ Pages.photos = (q) => {
       root.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => App.go('photos', { view: b.dataset.view })));
       root.querySelector('#ph-up').onclick = () => ACTIONS.photos();
       root.querySelectorAll('[data-addph]').forEach((b) => (b.onclick = () => ACTIONS.photos(b.dataset.addph)));
+      root.querySelectorAll('[data-edtxt]').forEach((b) => (b.onclick = () => updateTextForm(b.dataset.edtxt)));
       root.querySelectorAll('[data-stage]').forEach((b) => (b.onclick = () => App.go('photos', { stage: b.dataset.stage })));
       root.querySelectorAll('[data-ba]').forEach((b) => (b.onclick = () => App.go('photos', { view: q.view, stage: q.stage, ba: b.dataset.ba }, true)));
       root.querySelectorAll('[data-lb]').forEach((b) => (b.onclick = () => openLightbox(all, Number(b.dataset.lb))));

@@ -17,14 +17,44 @@ function weeklyList(d) { return d.weeklySummaries || (d.weeklySummaries = []); }
 function weeklyFor(d, friday) { return weeklyList(d).find((w) => w.week === friday); }
 function latestSentSummary(d) { return weeklyList(d).filter((w) => w.status === 'sent').sort((a, b) => b.week.localeCompare(a.week))[0]; }
 
+// "אינסטלציה 22/11/26 - 27/11/26" → "אינסטלציה"; "עבודות חשמל 01" → "עבודות חשמל".
+function cleanUpdateTitle(t) {
+  return String(t || '').replace(/\d{1,2}\/\d{1,2}\/\d{2,4}\s*[-–]\s*\d{1,2}\/\d{1,2}\/\d{2,4}/g, ' ').replace(/\s+0?\d{1,2}\s*$/, '').replace(/\s+/g, ' ').trim();
+}
+
+// What the photo journal shows for the week (Saturday to Friday): a new update with its description and first photos,
+// and every addition made that week to any update, with its own text and photos.
+function weekActivity(d, friday) {
+  const end = parseDate(friday);
+  const start = new Date(+end - 6 * 864e5);
+  const inWeek = (s) => s && parseDate(s) >= start && parseDate(s) <= end;
+  const items = [];
+  (d.updates || []).forEach((u) => {
+    const later = new Set((u.log || []).flatMap((e) => e.photos || []));
+    const name = cleanUpdateTitle(u.title);
+    if (inWeek(u.date)) items.push({ date: u.date, name, text: u.desc || '', photos: u.photos.filter((p) => !later.has(p)) });
+    (u.log || []).forEach((e) => { if (inWeek(e.date)) items.push({ date: e.date, name, text: e.text || '', photos: e.photos || [] }); });
+  });
+  return items.sort((a, b) => a.date.localeCompare(b.date));
+}
+function weekPhotos(d, friday) { return [...new Set(weekActivity(d, friday).flatMap((x) => x.photos))]; }
+
 // A first draft from what happened in the project this week. The team edits it before approval.
+// The photo journal's texts come first: one point per topic, with everything written about it that week.
 function weeklyDraft(d, friday) {
   const end = parseDate(friday);
   const start = new Date(+end - 6 * 864e5);
   const inWeek = (s) => s && parseDate(s) >= start && parseDate(s) <= end;
   const soon = (s) => s && parseDate(s) > end && parseDate(s) <= new Date(+end + 14 * 864e5);
+  const topics = new Map();
+  weekActivity(d, friday).forEach((x) => {
+    const t = topics.get(x.name) || [];
+    const text = x.text.trim().replace(/\s*[-–]?\s*\d{1,2}\/\d{1,2}\/\d{2,4}\s*$/, '');
+    if (text && !t.includes(text)) t.push(text);
+    topics.set(x.name, t);
+  });
   const done = [
-    ...d.updates.filter((u) => inWeek(u.date)).map((u) => u.title + (u.desc ? `: ${u.desc.split('.')[0]}` : '')),
+    ...[...topics].map(([name, texts]) => (texts.length ? `${name}: ${texts.map((x) => x.replace(/\.$/, '')).join('. ')}.` : name)),
     ...d.timeline.filter((s) => inWeek(s.ae)).map((s) => `הסתיים שלב ${s.name}`),
     ...d.plans.filter((p) => inWeek(p.versions[0].date)).map((p) => `הועלתה ${p.title} (גרסה ${p.versions[0].v})`),
     ...d.changes.filter((c) => c.status === 'approved' && inWeek(c.date)).map((c) => `אושר שינוי #${c.no}: ${c.title}`),
@@ -35,7 +65,18 @@ function weeklyDraft(d, friday) {
     ...d.tasks.filter((t) => !t.done && t.type === 'approval').map((t) => `מחכה לאישור שלכם: ${t.title.replace(/^אישור /, '')}`),
     ...d.casaMilestones.filter((m) => !m.paid && soon(m.due)).map((m) => `תשלום "${m.name}" ב־${fmtDateShort(m.due)}`),
   ];
-  return { done: [...new Set(done)].slice(0, 8), next: [...new Set(next)].slice(0, 8) };
+  return { done: [...new Set(done)].slice(0, 12), next: [...new Set(next)].slice(0, 8), photos: weekPhotos(d, friday) };
+}
+
+// The summary's photo gallery: a strip of thumbnails that opens the lightbox.
+function weeklyGallery(w, attr = 'data-wkph', max = 8) {
+  const list = (w && w.photos) || [];
+  if (!list.length) return '';
+  const more = list.length - max;
+  return `<div class="wk-gallery">${list.slice(0, max).map((src, i) => `<button class="lux" ${attr}="${i}" aria-label="${isVideo(src) ? 'צפייה בסרטון' : 'הגדלת תמונה'}">${thumbHtml(src)}${i === max - 1 && more > 0 ? `<span class="wk-more">+${more}</span>` : ''}</button>`).join('')}</div>`;
+}
+function bindWeeklyGallery(root, w, attr = 'data-wkph') {
+  root.querySelectorAll(`[${attr}]`).forEach((b) => (b.onclick = () => openLightbox(w.photos.map((src) => ({ src, title: 'הסיכום השבועי', sub: fmtDate(w.week) })), Number(b.getAttribute(attr)))));
 }
 
 function bulletList(items) {
@@ -70,6 +111,9 @@ Pages['bo-weekly'] = () => {
           <label class="field"><span>מה עשינו השבוע (שורה לכל נקודה)</span><textarea class="input" id="wk-done" rows="8">${esc((w ? w.done : []).join('\n'))}</textarea></label>
           <label class="field"><span>מה מתוכנן לשבוע הבא (שורה לכל נקודה)</span><textarea class="input" id="wk-next" rows="8">${esc((w ? w.next : []).join('\n'))}</textarea></label>
         </div>
+        <div class="field" style="margin-top:6px"><span>תמונות לסיכום <span class="small muted" id="wk-ph-n"></span></span>
+          <div class="wk-pick" id="wk-pick"></div>
+          <p class="form-hint" style="margin:6px 0 0">התמונות והסרטונים שהועלו השבוע. לחיצה על תמונה מוציאה אותה מהסיכום, ולחיצה נוספת מחזירה.</p></div>
         <div class="row-actions" style="flex-wrap:wrap">
           <button class="btn btn-ghost" id="wk-auto">${icon('edit')}מילוי אוטומטי ממה שקרה השבוע</button>
           <span class="spacer"></span>
@@ -83,14 +127,26 @@ Pages['bo-weekly'] = () => {
         <div class="chips">${others.map((p) => `<button class="chip" data-wp="${p.id}">${esc(p.name)}</button>`).join('')}</div>` : ''}
       ${past.length ? `<div class="section-title" style="margin-top:22px"><h2>סיכומים קודמים</h2></div>
         <div class="grid md-2">${past.map((x) => `<article class="card card-pad"><div class="card-head"><h3>${fmtDate(x.week)}</h3>${pill(...WEEKLY_STATUS[x.status])}</div>
-          <div class="small ink-2"><b>מה עשינו</b></div>${bulletList(x.done)}<div class="small ink-2"><b>מה הלאה</b></div>${bulletList(x.next)}</article>`).join('')}</div>` : ''}`,
+          <div class="small ink-2"><b>מה עשינו</b></div>${bulletList(x.done)}<div class="small ink-2"><b>מה הלאה</b></div>${bulletList(x.next)}${x.photos && x.photos.length ? `<p class="small muted" style="margin:8px 0 0">${x.photos.length} תמונות</p>` : ''}</article>`).join('')}</div>` : ''}`,
     mount(root) {
       const lines = (id) => root.querySelector(id).value.split('\n').map((s) => s.replace(/^[\s•\-*]+/, '').trim()).filter(Boolean);
+      // Photo picker: this week's photos plus any already chosen; all chosen until the summary is first saved.
+      const pool = [...new Set([...(w && w.photos ? w.photos : []), ...weekPhotos(d, friday)])];
+      let chosen = new Set(w && w.photos ? w.photos : pool);
+      const pick = root.querySelector('#wk-pick');
+      const drawPick = () => {
+        pick.innerHTML = pool.length ? pool.map((src, i) => `<button type="button" class="wk-pk ${chosen.has(src) ? 'on' : ''}" data-pk="${i}" aria-pressed="${chosen.has(src)}">${thumbHtml(src)}<span class="wk-pk-mark">${icon('check')}</span></button>`).join('')
+          : '<p class="small muted" style="margin:0">השבוע עוד לא הועלו תמונות ביומן הפרויקט.</p>';
+        root.querySelector('#wk-ph-n').textContent = pool.length ? `(${chosen.size} מתוך ${pool.length})` : '';
+        pick.querySelectorAll('[data-pk]').forEach((b) => (b.onclick = () => { const src = pool[b.dataset.pk]; if (chosen.has(src)) chosen.delete(src); else chosen.add(src); drawPick(); }));
+      };
+      drawPick();
       const upsert = (status) => {
         let cur = weeklyFor(d, friday);
         if (!cur) { cur = { id: 'w' + Date.now(), week: friday, done: [], next: [], status: 'draft' }; weeklyList(d).unshift(cur); }
         cur.done = lines('#wk-done');
         cur.next = lines('#wk-next');
+        cur.photos = pool.filter((src) => chosen.has(src));
         cur.editedBy = currentUserName();
         if (status === 'approved' || status === 'now') { cur.status = 'approved'; cur.approvedBy = currentUserName(); cur.approvedAt = new Date().toISOString(); }
         else if (cur.status !== 'sent') cur.status = 'draft';
@@ -101,6 +157,8 @@ Pages['bo-weekly'] = () => {
         if (!g.done.length && !g.next.length) return toast('לא מצאנו השבוע עדכונים, תכניות או שלבים. כותבים ידנית.');
         root.querySelector('#wk-done').value = g.done.join('\n');
         root.querySelector('#wk-next').value = g.next.join('\n');
+        chosen = new Set(pool);
+        drawPick();
         toast('הטיוטה מולאה. כדאי לעבור, לנסח ולמחוק מה שלא צריך.');
       };
       root.querySelector('#wk-save').onclick = () => { upsert('draft'); Store.log('עדכן את טיוטת הסיכום השבועי'); Store.save(); toast('הטיוטה נשמרה'); App.render(); };
@@ -143,8 +201,10 @@ function openWeeklyHistory() {
   openModal({
     title: 'הסיכומים השבועיים',
     wide: true,
-    body: list.length ? list.map((w) => `<section style="margin-bottom:18px"><h3 style="margin:0 0 6px">שבוע שהסתיים ב־${fmtDate(w.week)}</h3>
-      <div class="grid md-2"><div><div class="small ink-2"><b>מה עשינו</b></div>${bulletList(w.done)}</div><div><div class="small ink-2"><b>מה הלאה</b></div>${bulletList(w.next)}</div></div></section>`).join('<hr class="sep">')
+    body: list.length ? list.map((w, j) => `<section style="margin-bottom:18px"><h3 style="margin:0 0 6px">שבוע שהסתיים ב־${fmtDate(w.week)}</h3>
+      <div class="grid md-2"><div><div class="small ink-2"><b>מה עשינו</b></div>${bulletList(w.done)}</div><div><div class="small ink-2"><b>מה הלאה</b></div>${bulletList(w.next)}</div></div>
+      ${weeklyGallery(w, 'data-wh' + j, 12)}</section>`).join('<hr class="sep">')
       : '<div class="empty">עוד לא נשלחו סיכומים</div>',
+    onOpen(el) { list.forEach((w, j) => bindWeeklyGallery(el, w, 'data-wh' + j)); },
   });
 }

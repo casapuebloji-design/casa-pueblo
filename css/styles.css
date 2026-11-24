@@ -895,3 +895,5 @@ fieldset.inv-pays legend { font-size: 13px; font-weight: 600; color: var(--ink-2
 .check-row .small { display: block; }
 .inv-pays .check-row + .check-row { border-top: 1px solid var(--line); }
 .check-row[hidden] { display: none; }
+
+.chip-latest .i { width: 13px; height: 13px; margin-inline-end: 2px; }
