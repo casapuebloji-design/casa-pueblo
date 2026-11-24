@@ -34,8 +34,8 @@ function seedData() {
       family: 'אברהמי',
       address: 'רחוב הדקל 14, רמת השרון',
       image: 'assets/img/hero-home.jpg',
-      stage: 'עבודות גמר',
-      progress: 68,
+      stage: 'חיפוי, בניית מחיצות גבס (צד שני), נגרות כללית',
+      progress: 35,
       start: '2026-03-01',
       handover: '2027-02-15',
       pm: 'pm',
@@ -54,17 +54,28 @@ function seedData() {
       { name: 'שירן גל', role: 'מעצבת מטעם המשפחה', email: 'shiran@example.com', phone: '053-7778899', status: 'הוזמנה' },
     ],
 
+    // Work stages: actual dates only. Several stages run at the same time.
     timeline: [
-      { name: 'אפיון ופרוגרמה', ps: '2026-01-05', pe: '2026-01-31', as: '2026-01-05', ae: '2026-01-28', status: 'done', note: 'נחתמה פרוגרמה סופית.', photos: [] },
-      { name: 'תכנון', ps: '2026-02-01', pe: '2026-02-28', as: '2026-01-29', ae: '2026-02-26', status: 'done', note: '', photos: [] },
-      { name: 'בחירת חומרים', ps: '2026-02-15', pe: '2026-04-15', as: '2026-02-15', ae: '2026-04-20', status: 'done', note: 'כל החומרים נבחרו, כולל ריצוף וסניטריה.', photos: ['assets/img/j-55.jpg'] },
-      { name: 'הריסה', ps: '2026-03-01', pe: '2026-03-31', as: '2026-03-02', ae: '2026-03-29', status: 'done', note: '', photos: ['assets/img/before-kitchen.jpg', 'assets/img/before-1.jpg'] },
-      { name: 'בנייה', ps: '2026-04-01', pe: '2026-06-10', as: '2026-04-01', ae: '2026-06-08', status: 'done', note: '', photos: [] },
-      { name: 'תשתיות', ps: '2026-05-15', pe: '2026-08-05', as: '2026-05-18', ae: '2026-08-04', status: 'done', note: 'חשמל, אינסטלציה ומיזוג. כל הבדיקות עברו.', photos: [] },
-      { name: 'עבודות גמר', ps: '2026-08-06', pe: '2026-11-20', as: '2026-08-06', ae: null, status: 'active', note: 'ריצוף הסתיים. צבע וטיח בביצוע.', photos: ['assets/img/j-35.jpg', 'assets/img/j-8.jpg'] },
-      { name: 'נגרות', ps: '2026-09-15', pe: '2026-11-30', as: '2026-09-22', ae: null, status: 'delay', note: 'ספריית הסלון מתעכבת בכשבוע אצל הנגר. המסירה לא מושפעת.', photos: ['assets/img/j-63.jpg'] },
-      { name: 'התקנות', ps: '2026-12-01', pe: '2027-01-20', as: null, ae: null, status: 'future', note: '', photos: [] },
-      { name: 'מסירה', ps: '2027-02-01', pe: '2027-02-15', as: null, ae: null, status: 'future', note: '', photos: [] },
+      { name: 'פירוקים והריסות', status: 'done', as: '2026-03-02', ae: '2026-03-29', note: '', photos: ['assets/img/before-kitchen.jpg', 'assets/img/before-1.jpg'] },
+      { name: 'בניית מחיצות גבס (צד אחד)', status: 'done', as: '2026-04-01', ae: '2026-05-10', note: '', photos: [] },
+      { name: 'תשתיות חשמל', status: 'done', as: '2026-05-18', ae: '2026-07-20', note: '', photos: [] },
+      { name: 'תשתיות אינסטלציה', status: 'done', as: '2026-05-18', ae: '2026-07-28', note: '', photos: [] },
+      { name: 'תשתיות מיזוג אוויר', status: 'done', as: '2026-06-01', ae: '2026-08-04', note: 'כל הבדיקות עברו.', photos: [] },
+      { name: 'איטום חדרי רחצה', status: 'done', as: '2026-08-06', ae: '2026-08-20', note: '', photos: [] },
+      { name: 'ריצוף', status: 'done', as: '2026-08-24', ae: '2026-09-30', note: 'הריצוף בקומה העליונה הושלם.', photos: ['assets/img/j-35.jpg'] },
+      { name: 'חיפוי', status: 'active', as: '2026-09-21', ae: null, note: '', photos: [] },
+      { name: 'בניית מחיצות גבס (צד שני)', status: 'active', as: '2026-10-05', ae: null, note: '', photos: [] },
+      { name: 'נגרות כללית', status: 'active', as: '2026-09-22', ae: null, note: 'ספריית הסלון בייצור אצל הנגר.', photos: ['assets/img/j-63.jpg'] },
+      { name: 'התקנת אלומיניום', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'התקנת דלתות', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'התקנת אביזרי חשמל', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'התקנת גופי תאורה', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'התקנת ארונות מטבח', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'התקנת משטחי שיש', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'התקנת כלים סניטריים', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'נקיון', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'מסירה', status: 'future', as: null, ae: null, note: '', photos: [] },
+      { name: 'תיקונים', status: 'future', as: null, ae: null, note: '', photos: [] },
     ],
 
     plans: [
@@ -286,18 +297,28 @@ function seedData() {
   };
 }
 
-const STAGE_TEMPLATE = ['אפיון ופרוגרמה', 'תכנון', 'בחירת חומרים', 'הריסה', 'בנייה', 'תשתיות', 'עבודות גמר', 'נגרות', 'התקנות', 'מסירה'];
+// Casa Pueblo's work stages (Jorge, 24.11.2026). Each project picks the ones it has; more can be added.
+const WORK_STAGES = ['פירוקים והריסות', 'בניית מחיצות גבס (צד אחד)', 'תשתיות חשמל', 'תשתיות אינסטלציה', 'תשתיות מיזוג אוויר', 'תשתיות גז',
+  'איטום חדרי רחצה', 'איטום מרפסות', 'איטום כללי', 'ריצוף', 'חיפוי', 'התקנת פרקט', 'בניית מחיצות גבס (צד שני)', 'התקנת אדני חלונות',
+  'התקנת אלומיניום', 'התקנת דלתות', 'התקנת אביזרי חשמל', 'התקנת גופי תאורה', 'נגרות כללית', 'התקנת ארונות מטבח', 'התקנת משטחי שיש',
+  'התקנת כלים סניטריים', 'דלת ממ"ד', 'דלת כניסה', 'פיתוח וגינה', 'התקנת דק', 'נקיון', 'מסירה', 'תיקונים'];
+function newStage(name) { return { name, status: 'future', as: null, ae: null, note: '', photos: [] }; }
 
-// A new, empty project for the real system. With a template the stages are spread evenly between start and handover.
+// The project's progress and "current stage" follow the stages: done out of all, and whatever is in progress now.
+function stageSync(d) {
+  const tl = d.timeline || [];
+  const p = d.project;
+  p.progress = tl.length ? Math.round(tl.filter((s) => s.status === 'done').length / tl.length * 100) : 0;
+  const act = tl.filter((s) => s.status === 'active' || s.status === 'delay');
+  p.stage = act.length ? act.map((s) => s.name).join(', ') : (tl.find((s) => s.status === 'future') || {}).name || (tl.length ? 'הפרויקט הסתיים' : '');
+}
+
+// A new, empty project for the real system. With the template it gets all the work stages, not started.
 function emptyProjectData({ name = '', family = '', address = '', client = '', start = TODAY, handover = '', budget = 0, team = null, image = 'assets/img/hero-home.jpg', members = [], template = true } = {}) {
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const s = parseDate(start || TODAY);
   const e = handover ? parseDate(handover) : new Date(s.getFullYear() + 1, s.getMonth(), s.getDate());
-  const step = Math.max(1, (e - s) / STAGE_TEMPLATE.length);
-  const timeline = template ? STAGE_TEMPLATE.map((n, i) => ({
-    name: n, ps: iso(new Date(+s + step * i)), pe: iso(new Date(+s + step * (i + 1) - 864e5)),
-    as: i === 0 ? iso(s) : null, ae: null, status: i === 0 ? 'active' : 'future', note: '', photos: [],
-  })) : [];
+  const timeline = template ? WORK_STAGES.map(newStage) : [];
   return {
     project: {
       id: '', name, family, address, client: client || (family ? `משפחת ${family}` : ''), image,

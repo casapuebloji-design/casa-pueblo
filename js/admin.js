@@ -171,8 +171,7 @@ const MAX_PHOTOS = 30; // per photo update
 const MAX_VIDEO_MB = 200; // the storage bucket's per-file limit (Pro plan; the project's global limit must be at least this)
 const PROJECT_ACTIONS = [
   ['weekly', 'send', 'הסיכום השבועי'],
-  ['stage', 'timeline', 'עדכון שלב והתקדמות'],
-  ['timeline', 'history', 'עדכון לוח זמנים'],
+  ['timeline', 'timeline', 'שלבי עבודה'],
   ['details', 'edit', 'עריכת פרטי פרויקט'],
   ['plan', 'plans', 'העלאת תכנית'],
   ['version', 'layers', 'העלאת גרסה חדשה'],
@@ -332,6 +331,116 @@ function paymentsBoard() {
   });
 }
 
+/* ---------- Work stages: what is being done in the house, in real time ---------- */
+// Each stage: not started / in progress (start date) / done (end date). Several can be in progress at once.
+function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: s.status === 'delay' ? 'active' : s.status }))) {
+  const STATES = [['future', 'טרם התחיל'], ['active', 'בביצוע'], ['done', 'הסתיים']];
+  const rowHtml = (r, i) => `<div class="sb-row ${r.status}" data-i="${i}">
+      <div class="sb-name">${esc(r.name)}</div>
+      <div class="sb-seg" role="group" aria-label="${esc(r.name)}">${STATES.map(([k, l]) => `<button type="button" class="${k}" data-st="${i}:${k}" aria-pressed="${r.status === k}">${l}</button>`).join('')}</div>
+      ${r.status === 'future' ? '' : `<div class="sb-more">
+        <label><span>התחלה</span><input class="input" type="date" data-d="${i}:as" value="${esc(r.as || '')}"></label>
+        ${r.status === 'done' ? `<label><span>סיום</span><input class="input" type="date" data-d="${i}:ae" value="${esc(r.ae || '')}"></label>` : ''}
+        ${r.status === 'active' || r.note ? `<label class="sb-note"><span>הערה ללקוח (לא חובה)</span><input class="input" data-n="${i}" value="${esc(r.note || '')}"></label>` : ''}
+      </div>`}
+    </div>`;
+  openModal({
+    title: 'שלבי עבודה',
+    wide: true,
+    body: `<p class="small ink-2" style="margin-top:0">לוחצים על המצב של כל שלב. כמה שלבים יכולים להיות בביצוע באותו זמן. התאריך נרשם לבד (היום), ואפשר לשנות אותו. המשפחה רואה את השינוי מיד.</p>
+      <div id="sb-rows" class="sb-rows"></div>`,
+    foot: `<button class="btn btn-primary" id="sb-save">${icon('check')}שמירה</button><button class="btn btn-ghost" id="sb-pick">${icon('edit')}בחירת שלבים</button><button class="btn btn-ghost" data-close>ביטול</button>`,
+    onOpen(el) {
+      const box = el.querySelector('#sb-rows');
+      const collect = () => {
+        box.querySelectorAll('[data-d]').forEach((inp) => { const [i, k] = inp.dataset.d.split(':'); rows[i][k] = inp.value || null; });
+        box.querySelectorAll('[data-n]').forEach((inp) => { rows[inp.dataset.n].note = inp.value.trim(); });
+      };
+      const draw = () => {
+        box.innerHTML = rows.length ? rows.map(rowHtml).join('') : '<div class="empty">אין שלבים בפרויקט. לוחצים "בחירת שלבים".</div>';
+        box.querySelectorAll('[data-st]').forEach((b) => (b.onclick = () => {
+          collect();
+          const [i, k] = b.dataset.st.split(':');
+          const r = rows[i];
+          r.status = k;
+          if (k === 'future') { r.as = null; r.ae = null; }
+          if (k === 'active') { r.as = r.as || TODAY; r.ae = null; }
+          if (k === 'done') { r.as = r.as || TODAY; r.ae = r.ae || TODAY; }
+          draw();
+        }));
+      };
+      draw();
+      el.querySelector('#sb-pick').onclick = () => { collect(); closeModal(); stagePicker(rows); };
+      el.querySelector('#sb-save').onclick = () => {
+        collect();
+        const d = Store.data; // the project may have been reloaded while the window was open
+        const was = (name) => (d.timeline.find((x) => x.name === name) || {}).status;
+        const started = rows.filter((r) => r.status === 'active' && !['active', 'delay'].includes(was(r.name))).map((r) => r.name);
+        const finished = rows.filter((r) => r.status === 'done' && was(r.name) !== 'done').map((r) => r.name);
+        d.timeline = rows.map(stageRecord);
+        stageSync(d);
+        Store.log(`עדכן את שלבי העבודה${started.length ? `. התחיל: ${started.join(', ')}` : ''}${finished.length ? `. הסתיים: ${finished.join(', ')}` : ''}`, TEAM.pm.name);
+        if (started.length) Store.notify(`התחיל: ${started.join(', ')}`, 'timeline');
+        if (finished.length) Store.notify(`הסתיים: ${finished.join(', ')}`, 'timeline');
+        Store.save();
+        closeModal();
+        toast('שלבי העבודה עודכנו');
+        App.render();
+      };
+    },
+  });
+}
+// What is saved for a stage. ps/pe (planned dates) are no longer used; they are kept equal to the actual dates.
+function stageRecord(r) {
+  return { name: r.name, status: r.status, as: r.as || null, ae: r.ae || null, note: r.note || '', photos: r.photos || [], ps: r.as || r.ps || TODAY, pe: r.ae || r.pe || TODAY };
+}
+
+// Which stages this project has: Casa Pueblo's list plus any added by hand. Unticking removes a stage.
+function stagePicker(rows = Store.data.timeline.map((s) => ({ ...s }))) {
+  const have = new Set(rows.map((r) => r.name));
+  const all = [...WORK_STAGES, ...rows.map((r) => r.name).filter((n) => !WORK_STAGES.includes(n))];
+  const item = (n, on) => `<label class="check-row"><input type="checkbox" value="${esc(n)}" ${on ? 'checked' : ''}><span>${esc(n)}</span></label>`;
+  openModal({
+    title: 'בחירת שלבי העבודה לפרויקט',
+    wide: true,
+    body: `<p class="small ink-2" style="margin-top:0">מסמנים את השלבים שיש בפרויקט הזה. שלב שמורידים ממנו את הסימון יורד מהפרויקט.</p>
+      <div class="sp-grid" id="sp-list">${all.map((n) => item(n, have.has(n))).join('')}</div>
+      <div class="sp-add"><input class="input" id="sp-new" placeholder="שלב נוסף, למשל: התקנת פרגולה"><button type="button" class="btn btn-ghost" id="sp-add">${icon('plus')}הוספה</button></div>`,
+    foot: `<button class="btn btn-primary" id="sp-save">${icon('check')}שמירה</button><button class="btn btn-ghost" data-close>ביטול</button><span class="pp-err" id="sp-err" role="alert"></span>`,
+    onOpen(el) {
+      const list = el.querySelector('#sp-list');
+      const addOne = () => {
+        const inp = el.querySelector('#sp-new');
+        const n = inp.value.trim();
+        if (!n) return;
+        if (![...list.querySelectorAll('input')].some((c) => c.value === n)) list.insertAdjacentHTML('beforeend', item(n, true));
+        inp.value = '';
+        inp.focus();
+      };
+      el.querySelector('#sp-add').onclick = addOne;
+      el.querySelector('#sp-new').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addOne(); } };
+      let sure = false;
+      el.querySelector('#sp-save').onclick = () => {
+        const names = [...list.querySelectorAll('input:checked')].map((c) => c.value);
+        const dropped = rows.filter((r) => !names.includes(r.name) && r.status !== 'future');
+        if (dropped.length && !sure) {
+          sure = true;
+          el.querySelector('#sp-err').textContent = `${dropped.map((r) => r.name).join(', ')} כבר ${dropped.length > 1 ? 'התחילו' : 'התחיל'}. ללחוץ שוב כדי להוריד בכל זאת.`;
+          return;
+        }
+        const d = Store.data;
+        d.timeline = names.map((n) => stageRecord(rows.find((r) => r.name === n) || newStage(n)));
+        stageSync(d);
+        Store.log(`עדכן את רשימת שלבי העבודה (${names.length} שלבים)`, TEAM.pm.name);
+        Store.save();
+        closeModal();
+        App.render();
+        stagesBoard();
+      };
+    },
+  });
+}
+
 // Photo upload form. target = null starts a new update; an existing update gets the new photos added to it
 // (e.g. one "demolition, week of ..." entry that grows during the week). Each addition can carry its own text,
 // kept with its date and photos in u.log, so the weekly summary knows what was done and shown that week.
@@ -441,47 +550,7 @@ const ACTIONS = {
       },
     });
   },
-  stage() {
-    const p = Store.data.project;
-    formModal({
-      title: 'עדכון שלב והתקדמות',
-      fields: [
-        { id: 'stage', label: 'שלב נוכחי', type: 'select', options: Store.data.timeline.map((s) => s.name), value: p.stage },
-        { id: 'progress', label: 'אחוז התקדמות', type: 'range', value: p.progress },
-      ],
-      onSave(v) {
-        p.stage = v.stage; p.progress = v.progress;
-        Store.log(`עדכן שלב ל"${v.stage}" והתקדמות ל-${v.progress}%`, TEAM.pm.name);
-        Store.save();
-        return 'השלב וההתקדמות עודכנו';
-      },
-    });
-  },
-  timeline() {
-    const tl = Store.data.timeline;
-    formModal({
-      title: 'עדכון לוח זמנים',
-      fields: [
-        { id: 'i', label: 'שלב', type: 'select', options: tl.map((s, i) => [i, s.name]), value: tl.findIndex((s) => s.status === 'active') },
-        { id: 'status', label: 'סטטוס', type: 'select', options: [['future', 'לא התחיל'], ['active', 'בביצוע'], ['done', 'הסתיים'], ['delay', 'עיכוב']], value: 'active' },
-        { id: 'as', label: 'תאריך התחלה בפועל', type: 'date' },
-        { id: 'ae', label: 'תאריך סיום בפועל', type: 'date' },
-        { id: 'note', label: 'הערה ללקוח', type: 'textarea' },
-      ],
-      onSave(v) {
-        const s = tl[v.i];
-        s.status = v.status;
-        if (v.as) s.as = v.as;
-        if (v.ae) s.ae = v.ae;
-        if (v.status === 'done' && !s.ae) s.ae = TODAY;
-        if (v.status !== 'future' && !s.as) s.as = TODAY;
-        if (v.note) s.note = v.note;
-        Store.log(`עדכן את שלב "${s.name}" ל${STATUS[v.status][1]}`, TEAM.pm.name);
-        Store.save();
-        return 'לוח הזמנים עודכן';
-      },
-    });
-  },
+  timeline() { stagesBoard(); },
   // Everything the "new project" form asks, editable later. Saving here never sends an invite.
   details() {
     const d = Store.data;
@@ -859,7 +928,7 @@ Pages['bo-new'] = (q) => { const L = leadFor(q) || {}; return (!isJorge() ? { ti
         <label class="field"><span>תמונה ראשית</span><input class="input" type="file" name="img" accept="image/*"></label>
       </div>
       <label class="check"><input type="checkbox" name="invite" checked><span>לשלוח ללקוחות הזמנה לפתיחת משתמש</span></label>
-      <label class="check"><input type="checkbox" name="tpl" checked><span>ליצור לוח זמנים ותיקיות לפי התבנית הקבועה</span></label>
+      <label class="check"><input type="checkbox" name="tpl" checked><span>ליצור את שלבי העבודה ותיקיות לפי התבנית הקבועה</span></label>
       <div class="row-actions"><button class="btn btn-primary" type="submit">${icon('check')}יצירת הפרויקט</button><a class="btn btn-ghost" href="#/bo-home">ביטול</a></div>
     </form>`,
   mount(root) {

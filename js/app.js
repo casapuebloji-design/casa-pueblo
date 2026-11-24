@@ -5,7 +5,7 @@ const CLIENT_NAV = [
   ['project', 'project', 'הפרויקט שלי'],
   ['plans', 'plans', 'תכניות'],
   ['materials', 'materials', 'חומרים ובחירות'],
-  ['timeline', 'timeline', 'לוח זמנים'],
+  ['timeline', 'timeline', 'שלבי עבודה'],
   ['photos', 'photos', 'תמונות'],
   ['finance', 'finance', 'כספים ותשלומים'],
   ['documents', 'documents', 'מסמכים והסכמים'],
