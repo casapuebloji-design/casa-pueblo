@@ -372,7 +372,7 @@ function openPlan(id, vi = 0) {
   Store.save();
   const approver = canApprovePlans();
   openModal({
-    title: `${plan.title} · V${v.v}`,
+    title: `${v.title || plan.title} · V${v.v}`,
     wide: true,
     body: `
       <div class="split" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -444,25 +444,29 @@ function addPlanCategoryFlow() {
   });
 }
 
+// "הכי מעודכן" (the default) shows only the current version of each plan. A plan replaced by a newer one
+// keeps its file as an earlier version, shown under "הכל" and in its own category.
 Pages.plans = (q) => {
   const d = Store.data;
   const cats = planCategories(d);
-  const cat = q.cat || 'הכול';
-  const inCat = (p) => cat === 'הכול' || p.cat === cat;
+  const cat = q.cat || 'latest';
+  const inCat = (p) => cat === 'latest' || cat === 'הכול' || p.cat === cat;
   const list = d.plans.filter(inCat)
     .sort((a, b) => (a.exec === 'approved' ? 0 : 1) - (b.exec === 'approved' ? 0 : 1) || b.versions[0].date.localeCompare(a.versions[0].date));
-  const older = d.plans.filter(inCat).flatMap((p) => p.versions.slice(1).map((v, i) => ({ p, v, i: i + 1 }))).sort((a, b) => b.v.date.localeCompare(a.v.date));
+  const older = cat === 'latest' ? [] : d.plans.filter(inCat).flatMap((p) => p.versions.slice(1).map((v, i) => ({ p, v, i: i + 1 }))).sort((a, b) => b.v.date.localeCompare(a.v.date));
+  const nOld = d.plans.reduce((n, p) => n + p.versions.length - 1, 0);
   const pending = d.plans.filter((p) => p.status === 'pending').length;
   const approver = canApprovePlans();
   return {
     title: 'תכניות',
     html: `
-      <div class="page-head"><div><h1>תכניות</h1><p>התכניות העדכניות למעלה, והגרסאות הקודמות מתחת</p></div>
+      <div class="page-head"><div><h1>תכניות</h1><p>${cat === 'latest' ? 'רק התכניות המעודכנות ביותר. גרסאות שהוחלפו נמצאות ב"הכל".' : 'התכניות העדכניות למעלה, והגרסאות הקודמות מתחת'}</p></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${pending ? pill('red', `${pending} ממתינות לאישורכם`) : ''}
           ${d.plans.length ? `<button class="btn btn-ghost" id="pl-ver">${icon('layers')}גרסה חדשה</button>` : ''}
           <button class="btn btn-accent" id="pl-up">${icon('upload')}העלאת תכנית</button></div></div>
       <div class="chips" role="group" aria-label="סינון לפי קטגוריה">
-        ${['הכול', ...cats].map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c === 'הכול' ? 'הכל' : c)}<span class="n">${c === 'הכול' ? d.plans.length : d.plans.filter((p) => p.cat === c).length}</span></button>`).join('')}
+        <button class="chip chip-latest" aria-pressed="${cat === 'latest'}" data-cat="latest">${icon('check', 'xs')}הכי מעודכן<span class="n">${d.plans.length}</span></button>
+        ${['הכול', ...cats].map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c === 'הכול' ? 'הכל' : c)}<span class="n">${c === 'הכול' ? d.plans.length + nOld : d.plans.filter((p) => p.cat === c).length}</span></button>`).join('')}
         <button class="chip" id="pc-add">${icon('plus', 'xs')} קטגוריה</button>
       </div>
       <div class="card">
@@ -485,7 +489,7 @@ Pages.plans = (q) => {
       <div class="card older-plans"><ul class="rows">
         ${older.map(({ p, v, i }) => `<li class="row clickable compact" data-old="${p.id}" data-i="${i}">
           ${fileIco(v.file)}
-          <div class="main-col"><div class="title">${esc(p.title)} · גרסה ${v.v}</div><div class="sub">${esc(p.cat)} · ${fmtDate(v.date)}${v.note ? ` · ${esc(v.note)}` : ''}</div></div>
+          <div class="main-col"><div class="title">${esc(v.title || p.title)} · גרסה ${v.v}</div><div class="sub">${esc(p.cat)} · ${fmtDate(v.date)}${v.note ? ` · ${esc(v.note)}` : ''}</div></div>
           <div class="end">${pill('gray', 'הוחלפה')}</div>
         </li>`).join('')}
       </ul></div>` : ''}`,

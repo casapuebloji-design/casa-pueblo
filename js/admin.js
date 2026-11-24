@@ -551,11 +551,15 @@ const ACTIONS = {
     });
   },
   plan() {
+    const plans = Store.data.plans;
     formModal({
-      title: 'העלאת תכנית חדשה',
+      title: 'העלאת תכנית',
       fields: [
         { id: 'cat', label: 'קטגוריה', type: 'select', options: planCategories(Store.data) },
         { id: 'title', label: 'שם התכנית', required: true },
+        // A newer plan takes the old one's place in "הכי מעודכן"; the old file stays, as an earlier version.
+        ...(plans.length ? [{ id: 'replaces', label: 'האם היא מחליפה תכנית קיימת?', type: 'select', value: '',
+          options: [['', 'לא, זו תכנית חדשה'], ...plans.map((p) => [p.id, `מחליפה את: ${p.cat} · ${p.title} (V${p.versions[0].v})`])] }] : []),
         { id: 'file', label: 'קובץ', type: 'file', accept: '.pdf,.dwg,.dwf,.xls,.xlsx,image/*' },
         { id: 'approve', label: 'לבקש אישור מהלקוח', type: 'checkbox', value: true },
       ],
@@ -563,6 +567,23 @@ const ACTIONS = {
       onSave(v) { return withUpload(async () => {
         const f = v.file[0];
         const path = await storeFile(f);
+        const old = v.replaces && Store.data.plans.find((x) => x.id === v.replaces);
+        if (old) {
+          const nv = old.versions[0].v + 1;
+          old.versions.forEach((x) => { if (!x.title) x.title = old.title; }); // the replaced files keep their own name
+          old.versions.unshift({ v: nv, date: TODAY, by: uploaderName(), title: v.title, note: old.title !== v.title ? `מחליפה את "${old.title}"` : 'גרסה מעודכנת', path,
+            file: f ? f.name.split('.').pop().toUpperCase().slice(0, 4) : old.versions[0].file, size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—' });
+          old.title = v.title;
+          old.cat = v.cat;
+          old.status = v.approve ? 'pending' : 'new';
+          old.exec = 'draft'; // a new version waits for Jorge's approval for execution
+          Store.data.tasks.forEach((t) => { if (t.ref && t.ref.id === old.id && t.type === 'approval') t.done = true; });
+          if (v.approve) Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור ${v.title} V${nv}`, sub: `גרסה מעודכנת · ${fmtDateShort(TODAY)}`, ref: { page: 'plans', id: old.id }, level: 'red', done: false });
+          Store.log(`העלה תכנית מעודכנת: ${v.title} (V${nv})${v.approve ? ' וביקש אישור' : ''}`, TEAM.architect.name);
+          Store.notify(`עודכנה תכנית: ${v.title}${v.approve ? ' – נדרש אישורך' : ''}`, 'plans');
+          Store.save();
+          return 'התכנית המעודכנת הועלתה. הקודמת עברה ל"הכל", כגרסה קודמת.';
+        }
         const id = 'pl' + Date.now();
         Store.data.plans.unshift({ id, cat: v.cat, title: v.title, status: v.approve ? 'pending' : 'new', exec: 'draft', versions: [{ v: 1, date: TODAY, by: uploaderName(), note: 'גרסה ראשונה', path, file: f ? f.name.split('.').pop().toUpperCase().slice(0, 4) : 'PDF', size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—' }] });
         if (v.approve) Store.data.tasks.unshift({ id: 'k' + Date.now(), type: 'approval', title: `אישור ${v.title} V1`, sub: `ביקשה ${TEAM.architect.name} · ${fmtDateShort(TODAY)}`, ref: { page: 'plans', id }, level: 'red', done: false });
@@ -576,7 +597,7 @@ const ACTIONS = {
   version() {
     const plans = Store.data.plans;
     formModal({
-      title: 'גרסה חדשה לתכנית', intro: 'הגרסה הקודמת נשמרת בהיסטוריה ולא נמחקת.',
+      title: 'גרסה חדשה לתכנית', intro: 'הגרסה החדשה תופיע ב"הכי מעודכן", והקודמת עוברת ל"הכל" ולא נמחקת.',
       fields: [
         { id: 'id', label: 'תכנית', type: 'select', options: plans.map((p) => [p.id, `${p.cat} · ${p.title} (V${p.versions[0].v})`]) },
         { id: 'note', label: 'מה השתנה', type: 'textarea', required: true },
@@ -589,7 +610,8 @@ const ACTIONS = {
         const nv = p.versions[0].v + 1;
         const f = v.file[0];
         const path = await storeFile(f);
-        p.versions.unshift({ v: nv, date: TODAY, by: uploaderName(), note: v.note, path,
+        p.versions.forEach((x) => { if (!x.title) x.title = p.title; });
+        p.versions.unshift({ v: nv, title: p.title, date: TODAY, by: uploaderName(), note: v.note, path,
           file: f ? f.name.split('.').pop().toUpperCase().slice(0, 4) : p.versions[0].file, size: f ? (f.size / 1048576).toFixed(1) + 'MB' : p.versions[0].size });
         p.status = v.approve ? 'pending' : 'new';
         p.exec = 'draft'; // a new version waits for Jorge's approval for execution
