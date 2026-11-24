@@ -338,10 +338,6 @@ const PERMS = [
 ];
 const PERM_LABELS = { all: ['green', 'משפחה וצוות'], staff: ['blue', 'צוות'], jorge: ['red', 'חורחה בלבד'], view: ['gray', 'משפחה צופה, צוות משנה'] };
 
-// Team photos for the "about" section (from Itzik, 29.10.2026).
-const TEAM_NAMES = ['חורחה', 'יניב', 'עינב', 'אלכס', 'אולג'];
-const TEAM_PHOTOS = ['assets/img/team.jpg'];
-
 // Real before / after pairs from the Ramat Hasharon project on the company site.
 const BEFORE_AFTER = [
   { name: 'סלון', before: 'assets/img/before-living.jpg', after: 'assets/img/after-living.jpg' },

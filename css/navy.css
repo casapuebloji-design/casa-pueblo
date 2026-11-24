@@ -549,20 +549,6 @@ body.theme-navy { overflow-x: clip; }
 .swatch .sw-name { position: relative; z-index: 1; margin: 12px 14px; font-family: var(--serif); font-weight: 300; font-size: 15px; color: rgba(20, 24, 32, .72); letter-spacing: .04em; mix-blend-mode: multiply; }
 .swatch .sw-name.light { color: rgba(255, 255, 255, .85); mix-blend-mode: normal; }
 
-/* Team photos in "about" */
-/* Team photo in the about grid: caption below on phones, over the photo on wide screens */
-.about-tile.team { min-height: 0; }
-.about-tile.team .lux { position: relative; inset: auto; display: block; aspect-ratio: 3 / 2; }
-.about-tile.team .lux img { object-position: center 40%; }
-.about-tile.team .quote { position: static; background: none; padding: 20px 20px 24px; font-size: 22px; pointer-events: none; }
-.about-tile.team .quote .eyebrow { margin-bottom: 10px; }
-.about-tile.team .quote b { display: block; font-weight: 300; }
-.about-tile.team .quote p { margin: 6px 0 0; font-family: var(--sans); font-size: 15px; color: var(--ink-2); }
-@media (min-width: 1000px) {
-  .about-tile.team .lux { aspect-ratio: 2 / 1; }
-  .about-tile.team .quote { position: absolute; padding: 90px 32px 30px; font-size: 34px; background: linear-gradient(0deg, rgba(8, 15, 28, .92) 0%, rgba(8, 15, 28, .6) 55%, transparent 100%); }
-  .about-tile.team .quote p { color: #d8d2c7; font-size: 16px; }
-}
 
 /* Bright daylight photos: keep the hero text readable on phones */
 @media (max-width: 899px) {

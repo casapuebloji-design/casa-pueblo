@@ -140,12 +140,7 @@ function aboutSection() {
       <p>${esc(ABOUT.intro)}</p>
     </div>
     <div class="about-grid">
-      ${ABOUT.tiles.slice(0, 3).map(aboutTile).join('')}
-      <div class="about-tile photo team">
-        <button class="lux" data-team="0" aria-label="הצוות של קאסה פואבלו, לתצוגה מלאה"><img src="${TEAM_PHOTOS[0]}" alt="הצוות של קאסה פואבלו באתר בנייה: ${TEAM_NAMES.join(', ')}" loading="lazy"></button>
-        <div class="quote"><span class="eyebrow">הצוות שלנו</span><b>${TEAM_NAMES.join(' · ')}</b><p>האנשים שבונים לכם את הבית, מהשרטוט הראשון ועד המפתח.</p></div>
-      </div>
-      ${ABOUT.tiles.slice(3).map(aboutTile).join('')}
+      ${ABOUT.tiles.map(aboutTile).join('')}
     </div>
     <div class="about-foot"><span>Casa Pueblo · רח׳ זרחין 7, רעננה</span><a href="https://www.casa-pueblo.co.il" target="_blank" rel="noopener">casa-pueblo.co.il</a></div>
   </section>`;
@@ -270,7 +265,6 @@ Pages.home = () => {
     mount(root) {
       root.querySelectorAll('[data-task]').forEach((b) => (b.onclick = () => openTaskRef(Store.data.tasks.find((t) => t.id === b.dataset.task))));
       root.querySelectorAll('[data-lbg]').forEach((b) => (b.onclick = () => openLightbox(gallery, Number(b.dataset.lbg))));
-      root.querySelectorAll('[data-team]').forEach((b) => (b.onclick = () => openLightbox(TEAM_PHOTOS.map((src) => ({ src, title: 'הצוות של קאסה פואבלו' })), Number(b.dataset.team))));
       const wk = root.querySelector('[data-lbhome]');
       if (wk) wk.onclick = () => openLightbox(projectAlbum(), 0);
       const wh = root.querySelector('#wk-history');
