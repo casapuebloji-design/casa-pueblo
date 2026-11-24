@@ -23,6 +23,7 @@ Pages.finance = (q) => {
       root.querySelectorAll('[data-fcat]').forEach((b) => (b.onclick = () => App.go('finance', { tab: 'forecast', cat: b.dataset.fcat })));
       const doc = root.querySelector('#pp-doc');
       if (doc) doc.onclick = () => { if (!openFile(doc.dataset.path)) App.go('documents'); };
+      bindInvoices(root);
       bindTips(root);
     },
   };
@@ -76,7 +77,7 @@ function contractPaymentsHtml(cm, editable) {
     <ul class="pay-list">
       ${cm.ms.map((m, i) => `<li class="${m.paid ? 'paid' : m === cm.next ? 'next' : ''}">
         ${payCheck(`m:${i}`, m.paid, editable)}
-        <div class="pl-main"><b>${payTitle(m, i)}</b><span class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice ? ` · ${esc(m.invoice)}` : ''}` : esc(payWhen(m))}</span></div>
+        <div class="pl-main"><b>${payTitle(m, i)}</b><span class="sub">${m.paid ? `שולם ${fmtDate(m.paid)}${m.invoice && !m.invoiceDoc ? ` · ${esc(m.invoice)}` : ''}` : esc(payWhen(m))}</span>${invLink(m, editable, `m:${i}`)}</div>
         <div class="pl-amt"><b class="num">${ils(m.amount)}</b><span class="sub">${shareOf(m.amount, cm.contract)}</span></div>
       </li>`).join('')}
       <li class="total"><span></span><div class="pl-main"><b>סה״כ ההסכם</b></div><div class="pl-amt"><b class="num">${ils(cm.contract)}</b></div></li>
@@ -95,7 +96,7 @@ function additionsHtml(cm, editable) {
     <ul class="pay-list">
       ${cm.adds.map((c) => `<li class="${c.paid ? 'paid' : ''}">
         ${payCheck(`c:${c.id}`, c.paid, editable)}
-        <div class="pl-main"><b><span class="pay-no">תוספת ${c.no}</span> ${esc(c.title)}</b><span class="sub">${c.paid ? `שולם ${fmtDate(c.paid)}` : `אושר · ${fmtDate(c.date)}`}</span></div>
+        <div class="pl-main"><b><span class="pay-no">תוספת ${c.no}</span> ${esc(c.title)}</b><span class="sub">${c.paid ? `שולם ${fmtDate(c.paid)}` : `אושר · ${fmtDate(c.date)}`}</span>${invLink(c, editable, `c:${c.id}`)}</div>
         <div class="pl-amt"><b class="num">${ils(c.amount)}</b><span class="sub">כולל מע"מ</span></div>
       </li>`).join('')}
       ${cm.pending.map((c) => `<li class="pending">
@@ -105,6 +106,126 @@ function additionsHtml(cm, editable) {
       </li>`).join('')}
     </ul>
     <p class="form-hint">תוספת נכנסת לסה״כ הפרויקט רק אחרי שהלקוח מאשר אותה.</p>`;
+}
+
+/* ---------- Casa Pueblo's invoices to the family ---------- */
+// An invoice is a document in its own category. Each payment or addition it covers points to it (invoiceDoc),
+// so one invoice can cover several payments, and a payment can have none.
+const INV_CAT = 'חשבוניות קאסה פואבלו';
+function casaInvoices(d = Store.data) {
+  return (d.documents || []).filter((x) => x.cat === INV_CAT).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+function invoiceOf(item) { return item.invoiceDoc ? (Store.data.documents || []).find((x) => x.id === item.invoiceDoc) : null; }
+// "תשלום 2, תוספת 1": what an invoice covers.
+function invoicePays(doc, d = Store.data) {
+  const out = [];
+  (d.casaMilestones || []).forEach((m, i) => { if (m.invoiceDoc === doc.id) out.push(`תשלום ${i + 1}`); });
+  (d.changes || []).forEach((c) => { if (c.invoiceDoc === doc.id) out.push(`תוספת ${c.no}`); });
+  return out;
+}
+function invTitle(doc) { return doc.inv && doc.inv.no ? `חשבונית ${doc.inv.no}` : doc.title || 'חשבונית'; }
+// Under a payment: its invoice, or (Back Office) a button to attach one.
+function invLink(item, editable, key) {
+  const doc = invoiceOf(item);
+  if (doc) return `<button class="inv-link" data-invopen="${doc.id}">${icon('receipt', 'xs')}${esc(invTitle(doc))}</button>`;
+  return editable ? `<button class="inv-link add" data-invadd="${key}">${icon('plus', 'xs')}צירוף חשבונית</button>` : '';
+}
+function invoicesHtml(editable) {
+  const list = casaInvoices();
+  if (!list.length) return `<div class="empty">${editable ? 'עוד לא הועלו חשבוניות. אפשר לצרף חשבונית ליד כל תשלום, או בכפתור "העלאת חשבונית".' : 'כאן יופיעו החשבוניות שקאסה פואבלו מוציאה לכם.'}</div>`;
+  return `<ul class="pay-list inv-list">${list.map((x) => {
+    const pays = invoicePays(x);
+    return `<li>
+      <span class="inv-ico">${icon('receipt')}</span>
+      <div class="pl-main"><b>${esc(invTitle(x))}</b><span class="sub">${fmtDate(x.date)}${pays.length ? ` · ${pays.join(', ')}` : ''}</span></div>
+      <div class="pl-amt">${x.inv && x.inv.amount ? `<b class="num">${ils(x.inv.amount)}</b>` : ''}<button class="link-btn small" data-invopen="${x.id}">${icon('eye', 'xs')}צפייה</button></div>
+    </li>`;
+  }).join('')}</ul>`;
+}
+function bindInvoices(root, after) {
+  root.querySelectorAll('[data-invopen]').forEach((b) => (b.onclick = () => {
+    const doc = (Store.data.documents || []).find((x) => x.id === b.dataset.invopen);
+    if (!openFile(doc && doc.path)) toast(Store.live ? 'לחשבונית הזאת לא צורף קובץ' : 'בגרסה המלאה החשבונית נפתחת כאן');
+  }));
+  root.querySelectorAll('[data-invadd]').forEach((b) => (b.onclick = () => invoiceForm({ keys: [b.dataset.invadd], after })));
+}
+
+// Jorge uploads an invoice: the file, its number, date and amount, and the payments it covers.
+// A tax invoice/receipt is issued when the money arrives, so the payments it covers take the invoice date as
+// their paid date (and unpaid ones are ticked as paid), unless Jorge unticks that option.
+function invoiceForm({ keys = [], after = () => App.render() } = {}) {
+  const d = Store.data;
+  const items = [
+    ...(d.casaMilestones || []).map((m, i) => ({ key: `m:${i}`, item: m, label: `תשלום ${i + 1}${m.name && m.name !== `תשלום ${i + 1}` ? ` · ${m.name}` : ''}` })),
+    ...(d.changes || []).filter((c) => c.status === 'approved').map((c) => ({ key: `c:${c.id}`, item: c, label: `תוספת ${c.no} · ${c.title}` })),
+  ];
+  const sumOf = (ks) => items.filter((x) => ks.includes(x.key)).reduce((s, x) => s + (Number(x.item.amount) || 0), 0);
+  openModal({
+    title: 'העלאת חשבונית ללקוח',
+    body: `
+      <label class="field"><span>קובץ החשבונית</span><input class="input" type="file" id="inv-file" accept="application/pdf,image/*"></label>
+      <div class="form-grid inv-grid">
+        <label class="field"><span>מספר חשבונית</span><input class="input" id="inv-no" inputmode="numeric" placeholder="למשל: 1077"></label>
+        <label class="field"><span>תאריך</span><input class="input" type="date" id="inv-date" value="${TODAY}"></label>
+        <label class="field"><span>סכום (₪, כולל מע"מ)</span><input class="input num" type="text" inputmode="decimal" data-money id="inv-amt" value="${moneyFmt(sumOf(keys))}"></label>
+      </div>
+      ${items.length ? `<fieldset class="field inv-pays"><legend>על אילו תשלומים החשבונית?</legend>
+        ${items.map((x) => {
+          const has = invoiceOf(x.item);
+          return `<label class="check-row"><input type="checkbox" value="${x.key}" ${keys.includes(x.key) ? 'checked' : ''}>
+            <span>${esc(x.label)} · <b class="num">${ils(x.item.amount)}</b>
+            <span class="small muted">${x.item.paid ? `שולם ${fmtDate(x.item.paid)}` : 'טרם שולם'}${has ? ` · יש כבר ${esc(invTitle(has))}` : ''}</span></span></label>`;
+        }).join('')}
+      </fieldset>
+      <label class="check-row" id="inv-mark-row"><input type="checkbox" id="inv-mark" checked><span>תאריך התשלום הוא תאריך החשבונית<span class="small muted">התשלומים שבחרתי יסומנו כשולמו בתאריך הזה</span></span></label>` : ''}
+      <p class="form-hint">החשבונית תופיע ללקוח ליד התשלום, ברשימת החשבוניות בעמוד הכספים, ובמסמכים בקטגוריה "${INV_CAT}".</p>`,
+    foot: `<button class="btn btn-primary" id="inv-save">${icon('upload')}שמירה</button><button class="btn btn-ghost" data-close>ביטול</button><span class="pp-err" id="inv-err" role="alert"></span>`,
+    onOpen(el) {
+      const amt = el.querySelector('#inv-amt');
+      let amtTouched = false;
+      amt.addEventListener('input', () => { amtTouched = true; });
+      const chosen = () => [...el.querySelectorAll('.inv-pays input:checked')].map((c) => c.value);
+      const markRow = el.querySelector('#inv-mark-row');
+      const refresh = () => {
+        const ks = chosen();
+        if (!amtTouched) amt.value = moneyFmt(sumOf(ks));
+        if (markRow) markRow.hidden = !ks.length;
+      };
+      el.querySelectorAll('.inv-pays input').forEach((c) => (c.onchange = refresh));
+      refresh();
+      el.querySelector('#inv-save').onclick = async (ev) => {
+        const f = el.querySelector('#inv-file').files[0];
+        const err = el.querySelector('#inv-err');
+        if (Store.live && !f) { err.textContent = 'צריך לבחור את קובץ החשבונית.'; return; }
+        ev.target.disabled = true;
+        let path = '';
+        try { path = await storeFile(f); } catch (e) { ev.target.disabled = false; return; }
+        const no = el.querySelector('#inv-no').value.trim();
+        const date = el.querySelector('#inv-date').value || TODAY;
+        const ks = chosen();
+        const doc = {
+          id: 'd' + Date.now(), cat: INV_CAT, title: no ? `חשבונית ${no}` : `חשבונית ${fmtDate(date)}`, date,
+          type: f ? (f.name.split('.').pop() || 'PDF').toUpperCase().slice(0, 4) : 'PDF', size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—', path,
+          inv: { no, amount: moneyNum(amt.value) },
+        };
+        const data = Store.data; // the project may have been reloaded while the window was open
+        data.documents.unshift(doc);
+        const mark = el.querySelector('#inv-mark');
+        ks.forEach((k) => {
+          const [kind, id] = k.split(':');
+          const it = kind === 'm' ? (data.casaMilestones || [])[Number(id)] : (data.changes || []).find((c) => c.id === id);
+          if (!it) return;
+          it.invoiceDoc = doc.id;
+          if (mark && mark.checked) it.paid = date;
+        });
+        Store.log(`העלה ${doc.title}${ks.length ? ` (${invoicePays(doc, data).join(', ')})` : ''}`, TEAM.pm.name);
+        Store.save();
+        closeModal();
+        toast(`${doc.title} נשמרה`);
+        after();
+      };
+    },
+  });
 }
 
 function financeCasa() {
@@ -130,7 +251,12 @@ function financeCasa() {
         <div class="card-head"><h3>תוספות ושינויים</h3></div>
         ${additionsHtml(cm, false)}
       </article>
-    </div>`;
+    </div>
+
+    <article class="card card-pad" style="margin-top:14px">
+      <div class="card-head"><h3>החשבוניות של קאסה פואבלו</h3>${casaInvoices().length ? `<span class="small muted">${casaInvoices().length} חשבוניות</span>` : ''}</div>
+      ${invoicesHtml(false)}
+    </article>`;
 }
 
 // The whole project: what Casa Pueblo costs plus everything else the family pays for.
