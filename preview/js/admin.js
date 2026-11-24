@@ -332,16 +332,16 @@ function paymentsBoard() {
 }
 
 /* ---------- Work stages: what is being done in the house, in real time ---------- */
-// Each stage: not started / in progress (start date) / done (end date). Several can be in progress at once.
+// Each stage: not started / started (date) / in progress / done (end date). Several can run at once.
 function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: s.status === 'delay' ? 'active' : s.status }))) {
-  const STATES = [['future', 'טרם התחיל'], ['active', 'בביצוע'], ['done', 'הסתיים']];
+  const STATES = [['future', 'טרם התחיל'], ['start', 'התחלה'], ['active', 'בביצוע'], ['done', 'הסתיים']];
   const rowHtml = (r, i) => `<div class="sb-row ${r.status}" data-i="${i}">
       <div class="sb-name">${esc(r.name)}</div>
       <div class="sb-seg" role="group" aria-label="${esc(r.name)}">${STATES.map(([k, l]) => `<button type="button" class="${k}" data-st="${i}:${k}" aria-pressed="${r.status === k}">${l}</button>`).join('')}</div>
       ${r.status === 'future' ? '' : `<div class="sb-more">
         <label><span>התחלה</span><input class="input" type="date" data-d="${i}:as" value="${esc(r.as || '')}"></label>
         ${r.status === 'done' ? `<label><span>סיום</span><input class="input" type="date" data-d="${i}:ae" value="${esc(r.ae || '')}"></label>` : ''}
-        ${r.status === 'active' || r.note ? `<label class="sb-note"><span>הערה ללקוח (לא חובה)</span><input class="input" data-n="${i}" value="${esc(r.note || '')}"></label>` : ''}
+        ${r.status === 'start' || r.status === 'active' || r.note ? `<label class="sb-note"><span>הערה ללקוח (לא חובה)</span><input class="input" data-n="${i}" value="${esc(r.note || '')}"></label>` : ''}
       </div>`}
     </div>`;
   openModal({
@@ -364,7 +364,7 @@ function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: s.st
           const r = rows[i];
           r.status = k;
           if (k === 'future') { r.as = null; r.ae = null; }
-          if (k === 'active') { r.as = r.as || TODAY; r.ae = null; }
+          if (k === 'start' || k === 'active') { r.as = r.as || TODAY; r.ae = null; }
           if (k === 'done') { r.as = r.as || TODAY; r.ae = r.ae || TODAY; }
           draw();
         }));
@@ -375,7 +375,7 @@ function stagesBoard(rows = Store.data.timeline.map((s) => ({ ...s, status: s.st
         collect();
         const d = Store.data; // the project may have been reloaded while the window was open
         const was = (name) => (d.timeline.find((x) => x.name === name) || {}).status;
-        const started = rows.filter((r) => r.status === 'active' && !['active', 'delay'].includes(was(r.name))).map((r) => r.name);
+        const started = rows.filter((r) => ['start', 'active'].includes(r.status) && !['start', 'active', 'delay'].includes(was(r.name))).map((r) => r.name);
         const finished = rows.filter((r) => r.status === 'done' && was(r.name) !== 'done').map((r) => r.name);
         d.timeline = rows.map(stageRecord);
         stageSync(d);
