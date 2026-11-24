@@ -878,3 +878,20 @@ details.more-fields[open] summary { margin-bottom: 10px; }
 .pp-err { color: var(--st-red); font-size: 14px; font-weight: 600; align-self: center; }
 .pay-no { display: inline-block; font-size: 12px; font-weight: 700; color: var(--terra); background: var(--terra-soft); border-radius: 99px; padding: 1px 8px; margin-inline-end: 6px; vertical-align: 1px; white-space: nowrap; }
 .theme-navy .pay-no { background: rgba(212, 180, 131, .14); color: var(--gold); }
+
+/* ---------- Casa Pueblo invoices: next to each payment, and as a list ---------- */
+.inv-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line-2); background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.inv-link:hover { border-color: var(--terra); color: var(--terra); }
+.inv-link.add { border-style: dashed; color: var(--muted); }
+.inv-link .i { width: 13px; height: 13px; }
+.inv-list .inv-ico { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--terra-soft); color: var(--terra); }
+.inv-list .inv-ico .i { width: 16px; height: 16px; }
+.theme-navy .inv-list .inv-ico { background: rgba(212, 180, 131, .14); color: var(--gold); }
+@media (min-width: 640px) { .form-grid.inv-grid { grid-template-columns: 1fr 1fr 1fr; } }
+fieldset.inv-pays { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px 4px; margin: 4px 0 12px; }
+fieldset.inv-pays legend { font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 0 4px; }
+.check-row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; cursor: pointer; line-height: 1.45; }
+.check-row input { margin-top: 3px; width: 17px; height: 17px; flex: none; accent-color: var(--terra); }
+.check-row .small { display: block; }
+.inv-pays .check-row + .check-row { border-top: 1px solid var(--line); }
+.check-row[hidden] { display: none; }

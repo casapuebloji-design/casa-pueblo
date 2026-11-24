@@ -921,7 +921,7 @@ Pages.documents = (q) => {
       <div class="card"><ul class="rows">
         ${list.map((x) => `<li class="row">
           ${fileIco(x.type)}
-          <div class="main-col"><div class="title">${esc(x.title)}</div><div class="sub">${esc(x.cat)} · ${fmtDate(x.date)} · ${x.size}${x.expense ? ' · מקושר להוצאה' : ''}</div></div>
+          <div class="main-col"><div class="title">${esc(x.title)}</div><div class="sub">${esc(x.cat)} · ${fmtDate(x.date)} · ${x.size}${x.expense ? ' · מקושר להוצאה' : ''}${x.cat === INV_CAT && invoicePays(x).length ? ` · ${invoicePays(x).join(', ')}` : ''}</div></div>
           <div class="end"><button class="btn btn-sm btn-ghost" data-view="${x.id}">${icon('eye')}צפייה</button><button class="icon-btn" aria-label="שליחה בוואטסאפ" title="וואטסאפ" data-wa="${x.id}">${icon('whatsapp')}</button><button class="icon-btn" aria-label="שליחה במייל" title="מייל" data-mail="${x.id}">${icon('mail')}</button><button class="icon-btn" aria-label="הורדה" data-dl="${x.id}">${icon('download')}</button>${isJorge() ? `<button class="icon-btn" aria-label="מחיקה" title="מחיקה" data-ddel="${x.id}">${icon('close')}</button>` : ''}</div>
         </li>`).join('')}
       </ul></div>
@@ -938,6 +938,8 @@ Pages.documents = (q) => {
         if (b.dataset.sure !== '1') { b.dataset.sure = '1'; toast('ללחוץ שוב כדי למחוק את המסמך'); return; }
         const doc = d.documents.find((x) => x.id === b.dataset.ddel);
         d.documents = d.documents.filter((x) => x !== doc);
+        // a deleted invoice no longer shows next to the payments it covered
+        [...(d.casaMilestones || []), ...(d.changes || [])].forEach((it) => { if (it.invoiceDoc === doc.id) delete it.invoiceDoc; });
         Store.log(`מחק מסמך: ${doc.title}`);
         Store.save();
         App.render();
@@ -992,9 +994,11 @@ function uploadDocFlow() {
     body: `
       <label class="field"><span>קובץ</span><input class="input" type="file" id="ud-file"></label>
       <label class="field"><span>שם המסמך</span><input class="input" id="ud-title" placeholder="למשל: חשבונית וילונות"></label>
-      <label class="field"><span>קטגוריה</span><select class="input" id="ud-cat">${DOC_CATEGORIES.map((c) => `<option>${c}</option>`).join('')}</select></label>`,
+      <label class="field"><span>קטגוריה</span><select class="input" id="ud-cat">${DOC_CATEGORIES.filter((c) => c !== INV_CAT || isJorge()).map((c) => `<option>${c}</option>`).join('')}</select></label>`,
     foot: `<button class="btn btn-primary" id="ud-save">${icon('upload')}העלאה</button>`,
     onOpen(el) {
+      // Casa Pueblo's own invoices have their own form, which also links them to the payments they cover.
+      el.querySelector('#ud-cat').onchange = (e) => { if (e.target.value === INV_CAT) { closeModal(); invoiceForm(); } };
       el.querySelector('#ud-save').onclick = async (ev) => {
         const f = el.querySelector('#ud-file').files[0];
         if (Store.live && !f) { el.querySelector('#ud-file').focus(); return toast('צריך לבחור קובץ'); }

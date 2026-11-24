@@ -284,7 +284,7 @@ function paymentPlanEditor({ fromContract = false } = {}) {
           if (f) { f.classList.add('bad'); f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.focus({ preventScroll: true }); }
           return;
         }
-        Store.data.casaMilestones = list.map((r) => ({ name: r.name || r.when || `תשלום ${rows.indexOf(r) + 1}`, when: r.name ? r.when || '' : '', due: r.due || '', amount: Number(r.amount), paid: r.paid || null, invoice: r.invoice || '' }));
+        Store.data.casaMilestones = list.map((r) => ({ name: r.name || r.when || `תשלום ${rows.indexOf(r) + 1}`, when: r.name ? r.when || '' : '', due: r.due || '', amount: Number(r.amount), paid: r.paid || null, invoice: r.invoice || '', ...(r.invoiceDoc ? { invoiceDoc: r.invoiceDoc } : {}) }));
         const proj = Store.data.project; // the project may have been reloaded while the window was open
         proj.contract = Number(contract) || list.reduce((s, r) => s + Number(r.amount), 0);
         Store.log(`עדכן את התשלומים לפי ההסכם: ${list.length} תשלומים, ${ils(proj.contract)}`, TEAM.pm.name);
@@ -316,12 +316,18 @@ function paymentsBoard() {
       ${contractPaymentsHtml(cm, true) || '<div class="empty">עוד לא הוזנו התשלומים מההסכם.</div>'}
       <p class="form-hint">לוחצים על הריבוע כשתשלום מתקבל. הלקוח רואה אותו מסומן כשולם בעמוד הכספים.</p>
       <h3 style="margin:22px 0 10px">תוספות ושינויים</h3>
-      ${additionsHtml(cm, true)}`
+      ${additionsHtml(cm, true)}
+      <h3 style="margin:22px 0 10px">חשבוניות ללקוח</h3>
+      ${invoicesHtml(true)}`
       : '<div class="empty">עוד לא הוזנו התשלומים מההסכם. לוחצים "עריכת התשלומים", או מעלים את ההסכם ב"העלאת מסמך" בקטגוריה "הסכם התקשרות".</div>',
-    foot: `<button class="btn btn-primary" id="pb-edit">${icon('edit')}${cm.ms.length ? 'עריכת התשלומים' : 'הזנת התשלומים מההסכם'}</button><button class="btn btn-ghost" data-close>סגירה</button>`,
+    foot: `<button class="btn btn-primary" id="pb-edit">${icon('edit')}${cm.ms.length ? 'עריכת התשלומים' : 'הזנת התשלומים מההסכם'}</button><button class="btn btn-ghost" id="pb-inv">${icon('receipt')}העלאת חשבונית</button><button class="btn btn-ghost" data-close>סגירה</button>`,
     onOpen(el) {
       el.querySelectorAll('[data-paycheck]').forEach((b) => (b.onclick = () => togglePaid(b.dataset.paycheck, reopen)));
       el.querySelector('#pb-edit').onclick = () => { closeModal(); paymentPlanEditor(); };
+      // the invoice form replaces this window; when it is saved, this window opens again with the change
+      bindInvoices(el, reopen);
+      el.querySelectorAll('[data-invadd]').forEach((b) => (b.onclick = () => { closeModal(); invoiceForm({ keys: [b.dataset.invadd], after: reopen }); }));
+      el.querySelector('#pb-inv').onclick = () => { closeModal(); invoiceForm({ after: reopen }); };
     },
   });
 }
