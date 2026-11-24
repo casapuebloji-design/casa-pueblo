@@ -151,7 +151,8 @@ function bindInvoices(root, after) {
 }
 
 // Jorge uploads an invoice: the file, its number, date and amount, and the payments it covers.
-// Unpaid payments it covers can be ticked as paid on the invoice date at the same time.
+// A tax invoice/receipt is issued when the money arrives, so the payments it covers take the invoice date as
+// their paid date (and unpaid ones are ticked as paid), unless Jorge unticks that option.
 function invoiceForm({ keys = [], after = () => App.render() } = {}) {
   const d = Store.data;
   const items = [
@@ -176,7 +177,7 @@ function invoiceForm({ keys = [], after = () => App.render() } = {}) {
             <span class="small muted">${x.item.paid ? `שולם ${fmtDate(x.item.paid)}` : 'טרם שולם'}${has ? ` · יש כבר ${esc(invTitle(has))}` : ''}</span></span></label>`;
         }).join('')}
       </fieldset>
-      <label class="check-row" id="inv-mark-row"><input type="checkbox" id="inv-mark" checked><span>לסמן כשולמו את התשלומים שבחרתי שעוד לא סומנו (בתאריך החשבונית)</span></label>` : ''}
+      <label class="check-row" id="inv-mark-row"><input type="checkbox" id="inv-mark" checked><span>תאריך התשלום הוא תאריך החשבונית<span class="small muted">התשלומים שבחרתי יסומנו כשולמו בתאריך הזה</span></span></label>` : ''}
       <p class="form-hint">החשבונית תופיע ללקוח ליד התשלום, ברשימת החשבוניות בעמוד הכספים, ובמסמכים בקטגוריה "${INV_CAT}".</p>`,
     foot: `<button class="btn btn-primary" id="inv-save">${icon('upload')}שמירה</button><button class="btn btn-ghost" data-close>ביטול</button><span class="pp-err" id="inv-err" role="alert"></span>`,
     onOpen(el) {
@@ -188,7 +189,7 @@ function invoiceForm({ keys = [], after = () => App.render() } = {}) {
       const refresh = () => {
         const ks = chosen();
         if (!amtTouched) amt.value = moneyFmt(sumOf(ks));
-        if (markRow) markRow.hidden = !items.some((x) => ks.includes(x.key) && !x.item.paid);
+        if (markRow) markRow.hidden = !ks.length;
       };
       el.querySelectorAll('.inv-pays input').forEach((c) => (c.onchange = refresh));
       refresh();
@@ -215,7 +216,7 @@ function invoiceForm({ keys = [], after = () => App.render() } = {}) {
           const it = kind === 'm' ? (data.casaMilestones || [])[Number(id)] : (data.changes || []).find((c) => c.id === id);
           if (!it) return;
           it.invoiceDoc = doc.id;
-          if (mark && mark.checked && !it.paid) it.paid = date;
+          if (mark && mark.checked) it.paid = date;
         });
         Store.log(`העלה ${doc.title}${ks.length ? ` (${invoicePays(doc, data).join(', ')})` : ''}`, TEAM.pm.name);
         Store.save();
