@@ -790,7 +790,9 @@ const ACTIONS = {
       },
     });
   },
-  member() {
+  // The family members entered in the project details are offered first, with their emails; anyone else by hand.
+  member() { inviteFamilyFlow(); },
+  memberOther() {
     formModal({
       title: 'הזמנת משתמש לפרויקט', intro: Store.live ? 'המשתמש יקבל למייל קישור כניסה, ויראה רק את הפרויקט הזה.' : 'המשתמש יקבל קישור במייל או ב-SMS לבחירת סיסמה, ויראה רק את הפרויקט הזה.',
       fields: [
@@ -863,6 +865,49 @@ Pages['bo-project'] = () => {
     },
   };
 };
+
+// Invite the family members from the project details in one go: their email and role are already there.
+async function inviteFamilyFlow() {
+  const d = Store.data;
+  const people = (d.members || []).filter((m) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(m.email || '').trim()));
+  if (!people.length) return ACTIONS.memberOther();
+  let invited = new Set();
+  if (Store.live) { try { invited = new Set((await Live.invites(d.project.id)).map((x) => String(x.email).toLowerCase())); } catch (e) { /* show all as not invited */ } }
+  else invited = new Set(people.filter((m) => m.status === 'פעיל').map((m) => m.email.toLowerCase()));
+  const isIn = (m) => invited.has(String(m.email).trim().toLowerCase());
+  openModal({
+    title: 'הזמנת בני המשפחה לפורטל',
+    body: `<p class="ink-2" style="margin-top:0">מפרטי הפרויקט. כל מי שמסומן יקבל למייל קישור כניסה, ויראה רק את הפרויקט הזה.</p>
+      <div class="inv-people">${people.map((m, i) => `<label class="check-row"><input type="checkbox" value="${i}" ${isIn(m) ? '' : 'checked'}>
+        <span><b>${esc(m.name || '')}</b> · ${esc(m.role || '')}<span class="small muted" dir="ltr" style="display:block;text-align:right">${esc(m.email)}</span>
+        ${isIn(m) ? '<span class="small" style="color:var(--st-green, #2e7d4f)">כבר הוזמן. סימון ישלח לו קישור כניסה נוסף.</span>' : ''}</span></label>`).join('')}</div>
+      <p class="form-hint">חסר מישהו, או שהמייל לא נכון? מתקנים ב"עריכת פרטי פרויקט", או מזמינים ידנית ב"מישהו אחר".</p>`,
+    foot: `<button class="btn btn-primary" id="if-send">${icon('send')}שליחת הזמנות</button><button class="btn btn-ghost" id="if-other">${icon('plus')}מישהו אחר</button><button class="btn btn-ghost" data-close>ביטול</button><span class="pp-err" id="if-err" role="alert"></span>`,
+    onOpen(el) {
+      el.querySelector('#if-other').onclick = () => { closeModal(); ACTIONS.memberOther(); };
+      el.querySelector('#if-send').onclick = async (ev) => {
+        const chosen = [...el.querySelectorAll('.inv-people input:checked')].map((c) => people[c.value]);
+        if (!chosen.length) { el.querySelector('#if-err').textContent = 'לא סומן אף אחד.'; return; }
+        ev.target.disabled = true;
+        ev.target.textContent = 'שולח…';
+        const done = [], failed = [];
+        for (const m of chosen) {
+          const email = String(m.email).trim().toLowerCase();
+          try {
+            if (Store.live) await Live.invite(d.project.id, email, m.role || 'בן משפחה');
+            const row = (Store.data.members || []).find((x) => String(x.email || '').trim().toLowerCase() === email);
+            if (row && row.status !== 'פעיל') row.status = 'הוזמן';
+            done.push(m.name || email);
+          } catch (e) { failed.push(`${m.name || email} (${e.message})`); }
+        }
+        if (done.length) { Store.log(`הזמין לפורטל: ${done.join(', ')}`, TEAM.pm.name); Store.save(); }
+        closeModal();
+        App.render();
+        toast(failed.length ? `נשלח ל: ${done.join(', ') || 'אף אחד'}. לא נשלח ל: ${failed.join(', ')}` : `ההזמנה נשלחה ל${done.join(' ול')}`);
+      };
+    },
+  });
+}
 
 // Who can enter this project: invitations and whether they already signed in.
 async function fillProjectUsers(box) {

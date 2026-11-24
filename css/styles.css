@@ -951,3 +951,12 @@ fieldset.inv-pays legend { font-size: 13px; font-weight: 600; color: var(--ink-2
 @media (min-width: 640px) { .sp-grid { grid-template-columns: 1fr 1fr; } }
 .sp-add { display: flex; gap: 8px; margin-top: 12px; }
 .sp-add .input { flex: 1; }
+
+/* Weekly summary → WhatsApp */
+.wa-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: var(--radius-sm); background: rgba(37, 211, 102, .1); border: 1px solid rgba(37, 211, 102, .35); }
+.wa-cta .btn { background: #1fa855; border-color: #1fa855; }
+.wa-list .btn-primary { background: #1fa855; border-color: #1fa855; }
+.wa-list .btn.sent, .btn.sent { background: transparent; color: #1f7a44; border-color: #1fa855; }
+.wa-preview { white-space: pre-wrap; font: inherit; font-size: 14px; background: var(--sand, #f3efe8); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0 0; direction: rtl; text-align: right; }
+
+.inv-people .check-row + .check-row { border-top: 1px solid var(--line); }
