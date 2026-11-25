@@ -61,6 +61,8 @@ function isProjectStaff() {
   return !!(Store.session && Store.session.role === 'staff');
 }
 function canApprovePlans() { return isProjectStaff(); }
+// A staff session, also while it views the portal as the client: the editing tools are shown on the client pages.
+function staffMode() { return !!(Store.session && Store.session.role === 'staff'); }
 // Who is shown as the uploader of a plan or a photo.
 function uploaderName(role = 'architect') {
   if (Store.live || !App.isStaffView()) return currentUserName();
