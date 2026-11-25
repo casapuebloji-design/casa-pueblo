@@ -760,7 +760,7 @@ const ACTIONS = {
   version() {
     const plans = Store.data.plans;
     formModal({
-      title: 'גרסה חדשה לתכנית', intro: 'הגרסה החדשה תופיע ב"הכי מעודכן", והקודמת עוברת ל"הכל" ולא נמחקת.',
+      title: 'גרסה חדשה לתכנית', intro: 'הגרסה החדשה תופיע ב"הכי מעודכן", והקודמת נשארת בקטגוריה שלה, תחת "גרסאות קודמות".',
       fields: [
         { id: 'id', label: 'תכנית', type: 'select', options: plans.map((p) => [p.id, `${p.cat} · ${p.title} (V${p.versions[0].v})`]) },
         { id: 'note', label: 'מה השתנה', type: 'textarea', required: true },
