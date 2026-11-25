@@ -456,21 +456,20 @@ function addPlanCategoryFlow() {
 }
 
 // "הכי מעודכן" (the default) shows only the current version of each plan. A plan replaced by a newer one
-// keeps its file as an earlier version, shown under "הכל" and in its own category.
+// keeps its file as an earlier version, shown only in its own category, under "גרסאות קודמות".
 Pages.plans = (q) => {
   const d = Store.data;
   const cats = planCategories(d);
-  const cat = q.cat || 'latest';
-  const inCat = (p) => cat === 'latest' || cat === 'הכול' || p.cat === cat;
-  const oneCat = cat !== 'latest' && cat !== 'הכול';
+  const cat = q.cat && q.cat !== 'הכול' ? q.cat : 'latest';
+  const inCat = (p) => cat === 'latest' || p.cat === cat;
+  const oneCat = cat !== 'latest';
   const sub = oneCat && q.sub === 'old' ? 'old' : 'cur';
   // Earlier versions of each plan, plus plans taken out of "הכי מעודכן" (all their versions).
   const oldOf = (p) => (p.outdated ? p.versions.map((v, i) => ({ p, v, i })) : p.versions.slice(1).map((v, i) => ({ p, v, i: i + 1 })));
   const nOldOf = (ps) => ps.reduce((n, p) => n + oldOf(p).length, 0);
   const list = (sub === 'old' ? [] : d.plans.filter((p) => inCat(p) && !p.outdated))
     .sort((a, b) => (a.exec === 'approved' ? 0 : 1) - (b.exec === 'approved' ? 0 : 1) || b.versions[0].date.localeCompare(a.versions[0].date));
-  const older = cat === 'latest' || (oneCat && sub === 'cur') ? [] : d.plans.filter(inCat).flatMap(oldOf).sort((a, b) => b.v.date.localeCompare(a.v.date));
-  const nOld = nOldOf(d.plans);
+  const older = sub === 'cur' ? [] : d.plans.filter(inCat).flatMap(oldOf).sort((a, b) => b.v.date.localeCompare(a.v.date));
   const nCur = (ps) => ps.filter((p) => !p.outdated).length;
   const staff = staffMode();
   const pending = d.plans.filter((p) => p.status === 'pending').length;
@@ -478,13 +477,13 @@ Pages.plans = (q) => {
   return {
     title: 'תכניות',
     html: `
-      <div class="page-head"><div><h1>תכניות</h1><p>${cat === 'latest' ? 'התכנית המעודכנת ביותר מכל קטגוריה. גרסאות שהוחלפו נשמרות בקטגוריה שלהן, תחת "גרסאות קודמות".' : oneCat ? `${esc(cat)}: התכניות המעודכנות והגרסאות הקודמות` : 'כל התכניות, כולל הגרסאות הקודמות'}</p></div>
+      <div class="page-head"><div><h1>תכניות</h1><p>${cat === 'latest' ? 'רק התכניות המעודכנות ביותר. גרסאות שהוחלפו נשמרות בקטגוריה שלהן, תחת "גרסאות קודמות".' : `${esc(cat)}: ${sub === 'old' ? 'הגרסאות שהוחלפו' : 'התכניות המעודכנות'}`}</p></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${pending ? pill('red', `${pending} ממתינות לאישורכם`) : ''}
           ${d.plans.length ? `<button class="btn btn-ghost" id="pl-ver">${icon('layers')}גרסה חדשה</button>` : ''}
           <button class="btn btn-accent" id="pl-up">${icon('upload')}העלאת תכנית</button></div></div>
       <div class="chips" role="group" aria-label="סינון לפי קטגוריה">
         <button class="chip chip-latest" aria-pressed="${cat === 'latest'}" data-cat="latest">${icon('check', 'xs')}הכי מעודכן<span class="n">${nCur(d.plans)}</span></button>
-        ${['הכול', ...cats].map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c === 'הכול' ? 'הכל' : c)}<span class="n">${c === 'הכול' ? nCur(d.plans) + nOld : nCur(d.plans.filter((p) => p.cat === c))}</span></button>`).join('')}
+        ${cats.map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c)}<span class="n">${nCur(d.plans.filter((p) => p.cat === c))}</span></button>`).join('')}
         <button class="chip" id="pc-add">${icon('plus', 'xs')} קטגוריה</button>
       </div>
       ${oneCat ? (() => { const inC = d.plans.filter((p) => p.cat === cat); return `<div class="seg pl-sub" role="group" aria-label="בתוך הקטגוריה">
