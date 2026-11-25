@@ -1075,7 +1075,8 @@ Pages.tasks = () => {
 };
 
 /* ---------- מדריך לפורטל ---------- */
-// For the family: the first login (the email arrives in English), the home-screen icon, and what is in each area.
+// For the family, once inside: what is in each area, everyday use, the home-screen icon and a forgotten password.
+// The first login (the English email) is explained in the WhatsApp message they get with the invitation.
 const HELP_AREAS = [
   ['home', 'ראשי', 'הסיכום השבועי, השלבים שבביצוע עכשיו ומה מחכה לכם.'],
   ['timeline', 'שלבי עבודה', 'מה מתבצע בבית עכשיו, מה הסתיים ומה הבא בתור.'],
@@ -1094,21 +1095,6 @@ Pages.help = () => ({
   html: `
     <div class="page-head"><div><h1>מדריך לפורטל</h1><p>כל מה שצריך כדי להשתמש באזור האישי של הפרויקט</p></div></div>
     <div class="help">
-      <article class="card card-pad">
-        <h3>כניסה ראשונה</h3>
-        <ol class="help-steps">
-          <li>יגיע אליכם מייל מ־<b>Casa Pueblo</b>. הוא באנגלית. אם הוא לא בתיבה הראשית, בודקים בספאם או ב"קידומי מכירות".</li>
-          <li>לוחצים על הקישור שבמייל. הפורטל נפתח בעברית ומבקש לבחור סיסמה.</li>
-          <li>בוחרים סיסמה ושומרים. מעכשיו נכנסים עם המייל והסיסמה.</li>
-        </ol>
-        <p class="help-note">הקישור במייל עובד פעם אחת. אם הוא כבר לא עובד, נכנסים לפורטל, מזינים את המייל ולוחצים "שליחת קישור כניסה למייל".</p>
-      </article>
-      <article class="card card-pad">
-        <h3>אייקון במסך הבית</h3>
-        <p><b>אייפון ואייפד:</b> פותחים את הפורטל ב־Safari, לוחצים על כפתור השיתוף (ריבוע עם חץ למעלה), ואז "הוספה למסך הבית".</p>
-        <p><b>אנדרואיד:</b> פותחים את הפורטל ב־Chrome, לוחצים על שלוש הנקודות למעלה, ואז "הוספה למסך הבית" או "התקנת אפליקציה".</p>
-        <p class="help-note">באייפון, מהאייקון שבמסך הבית נכנסים עם המייל והסיסמה. קישור מהמייל תמיד נפתח בדפדפן.</p>
-      </article>
       <article class="card card-pad help-wide">
         <h3>מה יש בכל אזור</h3>
         <ul class="help-areas">${HELP_AREAS.map(([p, t, x]) => `<li><a href="#/${p}">${esc(t)}</a><span>${esc(x)}</span></li>`).join('')}</ul>
@@ -1121,6 +1107,12 @@ Pages.help = () => ({
           <li>הזכוכית המגדלת היא <b>חיפוש</b> בכל הפורטל: תכנית, חומר, מסמך או בעל מקצוע.</li>
           <li>אפשר לעבור בין <b>טאבים למעלה</b> ל<b>תפריט צד</b> בכפתור שליד הפעמון.</li>
         </ul>
+      </article>
+      <article class="card card-pad">
+        <h3>אייקון במסך הבית</h3>
+        <p><b>אייפון ואייפד:</b> פותחים את הפורטל ב־Safari, לוחצים על כפתור השיתוף (ריבוע עם חץ למעלה), ואז "הוספה למסך הבית".</p>
+        <p><b>אנדרואיד:</b> פותחים את הפורטל ב־Chrome, לוחצים על שלוש הנקודות למעלה, ואז "הוספה למסך הבית" או "התקנת אפליקציה".</p>
+        <p class="help-note">באייפון, מהאייקון שבמסך הבית נכנסים עם המייל והסיסמה. קישור מהמייל תמיד נפתח בדפדפן.</p>
       </article>
       <article class="card card-pad">
         <h3>שכחתם סיסמה?</h3>
