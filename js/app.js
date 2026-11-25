@@ -1,18 +1,22 @@
 /* App shell: login, navigation, routing, global search. */
 
+// The client areas in reading order, grouped by topic (NAV_GROUPS names the group that starts at each area).
 const CLIENT_NAV = [
   ['home', 'home', 'ראשי'],
-  ['project', 'project', 'הפרויקט שלי'],
+  ['timeline', 'timeline', 'שלבי עבודה'],
+  ['photos', 'photos', 'תמונות ויומן'],
   ['plans', 'plans', 'תכניות'],
   ['materials', 'materials', 'חומרים ובחירות'],
-  ['timeline', 'timeline', 'שלבי עבודה'],
-  ['photos', 'photos', 'תמונות'],
+  ['tasks', 'tasks', 'משימות ואישורים'],
+  ['todo', 'check', 'המטלות שלי'],
   ['finance', 'finance', 'כספים ותשלומים'],
   ['documents', 'documents', 'מסמכים והסכמים'],
+  ['project', 'project', 'הפרויקט שלי'],
   ['pros', 'pros', 'בעלי מקצוע'],
   ['service', 'service', 'אחריות'],
 ];
-const CLIENT_EXTRA = [['todo', 'check', 'המטלות שלי'], ['tasks', 'tasks', 'משימות ואישורים'], ['notifications', 'bell', 'התראות']];
+const NAV_GROUPS = { timeline: 'מה קורה בשטח', plans: 'תכנון ובחירות', tasks: 'לטיפולכם', finance: 'כסף ומסמכים', project: 'הפרויקט והצוות' };
+const CLIENT_EXTRA = [['help', 'info', 'מדריך לפורטל'], ['notifications', 'bell', 'התראות']];
 const CLIENT_TABS = [['home', 'home', 'ראשי'], ['plans', 'plans', 'תכניות'], ['photos', 'photos', 'תמונות'], ['finance', 'finance', 'כספים']];
 
 const STAFF_NAV = [
@@ -301,6 +305,7 @@ function pager(page) {
 
 function clientMasthead(page, unread, tasks, staffSession) {
   const items = [...CLIENT_NAV, CLIENT_EXTRA[0]];
+  const sep = (p) => (NAV_GROUPS[p] ? `<span class="nav-sep" aria-hidden="true" title="${NAV_GROUPS[p]}"></span>` : '');
   return `
   <header class="masthead">
     <div class="masthead-top">
@@ -321,7 +326,7 @@ function clientMasthead(page, unread, tasks, staffSession) {
       <nav class="navtabs" aria-label="תפריט ראשי">
         ${items.map(([p, ic, l]) => {
           const c = p === 'tasks' ? tasks : 0;
-          return `<a href="#/${p}" ${p === page ? 'aria-current="page"' : ''}>${icon(ic)}<span>${l}</span>${c ? `<span class="count">${c}</span>` : ''}</a>`;
+          return `${sep(p)}<a href="#/${p}" ${p === page ? 'aria-current="page"' : ''}>${icon(ic)}<span>${l}</span>${c ? `<span class="count">${c}</span>` : ''}</a>`;
         }).join('')}
       </nav>
       <button class="nudge l" data-nudge="-1" aria-label="טאבים נוספים">${icon('chevron')}</button>
@@ -359,15 +364,15 @@ function shellView(page, view, staff) {
     return `
     <div class="shell tabs-mode">
       ${clientMasthead(page, unread, tasks, staffSession)}
-      <main class="main" id="main">${view.html}${pager(page)}</main>
+      <main class="main" id="main">${staffSession ? staffBar(page) : ''}${view.html}${pager(page)}</main>
       ${resetLink()}
     </div>`;
   }
   const sidebar = staff
     ? `<div class="nav-group">BACK OFFICE</div><nav>${STAFF_NAV.filter((n) => n[0] !== 'bo-new' || isJorge()).map((n) => navLink(n, page)).join('')}</nav>`
-    : `<nav>${CLIENT_NAV.map((n) => navLink(n, page)).join('')}</nav>
-       <div class="nav-group">רכיבים רוחביים</div>
-       <nav>${navLink(CLIENT_EXTRA[0], page)}${navLink(CLIENT_EXTRA[1], page, tasks)}${navLink(CLIENT_EXTRA[2], page, unread)}</nav>`;
+    : `<nav>${CLIENT_NAV.map((n) => `${NAV_GROUPS[n[0]] ? `</nav><div class="nav-group">${NAV_GROUPS[n[0]]}</div><nav>` : ''}${navLink(n, page, n[0] === 'tasks' ? tasks : 0)}`).join('')}</nav>
+       <div class="nav-group">עזרה</div>
+       <nav>${navLink(CLIENT_EXTRA[0], page)}${navLink(CLIENT_EXTRA[1], page, unread)}</nav>`;
   const who = Store.live ? currentUserName() : staff ? TEAM.pm.name : 'אורי אברהמי';
   return `
   <div class="shell">
@@ -393,7 +398,7 @@ function shellView(page, view, staff) {
         ${Store.live ? `<button class="icon-btn" id="set-pass" aria-label="סיסמה" title="בחירת סיסמה">${icon('key')}</button>` : ''}
         <button class="icon-btn" id="logout" aria-label="יציאה">${icon('logout')}</button>
       </header>
-      <main class="main" id="main">${view.html}${staff ? '' : pager(page)}</main>
+      <main class="main" id="main">${staffSession && !staff ? staffBar(page) : ''}${view.html}${staff ? '' : pager(page)}</main>
     </div>
     ${staff ? staffTabbar(page) : clientTabbar(page, tasks)}
   </div>`;
@@ -430,6 +435,7 @@ function bindShell(app) {
   };
   const more = app.querySelector('#open-more');
   if (more) more.onclick = (e) => { e.preventDefault(); openMore(); };
+  bindStaffBar(app);
   const sw = app.querySelector('#switch-view');
   if (sw) sw.onclick = () => {
     Store.session.view = App.isStaffView() ? 'client' : 'staff';
@@ -455,7 +461,7 @@ function openMore() {
     body: `<div class="more-sheet">
       ${items.map(([p, ic, l]) => {
         const c = p === 'tasks' ? tasks : p === 'notifications' ? unread : 0;
-        return `<a href="#/${p}" data-close>${icon(ic)}<span>${l}</span>${c ? `<span class="count">${c}</span>` : ''}</a>`;
+        return `${NAV_GROUPS[p] ? `<div class="more-grp">${NAV_GROUPS[p]}</div>` : p === 'help' ? '<div class="more-grp">עזרה</div>' : ''}<a href="#/${p}" data-close>${icon(ic)}<span>${l}</span>${c ? `<span class="count">${c}</span>` : ''}</a>`;
       }).join('')}
     </div>
     <hr class="sep">

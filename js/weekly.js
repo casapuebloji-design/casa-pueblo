@@ -79,6 +79,43 @@ function bindWeeklyGallery(root, w, attr = 'data-wkph') {
   root.querySelectorAll(`[${attr}]`).forEach((b) => (b.onclick = () => openLightbox(w.photos.map((src) => ({ src, title: 'הסיכום השבועי', sub: fmtDate(w.week) })), Number(b.getAttribute(attr)))));
 }
 
+// WhatsApp: the summary itself stays in the portal (with its gallery). Each family member gets a short
+// message with the main points and a link, sent from Jorge's own WhatsApp with one tap per person.
+const PORTAL_URL = 'https://casapuebloji-design.github.io/casa-pueblo/app.html';
+function weeklyWaText(w, name = '') {
+  const first = String(name).trim().split(/\s+/)[0];
+  const short = (x) => (x.length > 110 ? x.slice(0, 108).replace(/\s+\S*$/, '') + '…' : x);
+  const pts = (w.done || []).slice(0, 3).map((x) => '• ' + short(x)).join('\n');
+  const n = (w.photos || []).length;
+  return [
+    `שלום${first ? ' ' + first : ''},`,
+    `הסיכום השבועי של הפרויקט מחכה לכם בפורטל${n ? `, עם ${n} תמונות מהשבוע` : ''}.`,
+    pts,
+    `לצפייה: ${PORTAL_URL}`,
+    `${(TEAM.pm && TEAM.pm.name) || 'חורחה'}, קאסה פואבלו`,
+  ].filter(Boolean).join('\n\n');
+}
+function weeklyWhatsApp(w) {
+  const members = (Store.data.members || []).filter((m) => m.name || m.phone);
+  const withPhone = members.filter((m) => String(m.phone || '').replace(/\D/g, '').length >= 9);
+  openModal({
+    title: 'שליחת הסיכום בוואטסאפ',
+    body: `<p class="ink-2" style="margin-top:0">כל כפתור פותח את הוואטסאפ שלך עם הודעה מוכנה לאותו אדם. נשאר רק ללחוץ "שלח".</p>
+      <ul class="rows wa-list">${members.map((m) => {
+        const ok = withPhone.includes(m);
+        return `<li class="row"><div class="main-col"><div class="title">${esc(m.name || '')}</div><div class="sub">${esc(m.role || '')}${ok ? ` · <span dir="ltr">${esc(m.phone)}</span>` : ' · אין מספר טלפון'}</div></div>
+          <div class="end">${ok ? `<a class="btn btn-sm btn-primary" data-wa href="${esc(waLink(m.phone, weeklyWaText(w, m.name)))}" target="_blank" rel="noopener">${icon('whatsapp')}שליחה</a>` : ''}</div></li>`;
+      }).join('') || '<li class="empty">אין בפרויקט בני משפחה עם מספר טלפון. מוסיפים ב"עריכת פרטי פרויקט".</li>'}</ul>
+      <p class="small" style="margin:14px 0 6px"><b>או לקבוצת וואטסאפ של המשפחה / למספר אחר:</b></p>
+      <a class="btn btn-ghost" data-wa href="https://wa.me/?text=${encodeURIComponent(weeklyWaText(w))}" target="_blank" rel="noopener">${icon('whatsapp')}בחירת איש קשר או קבוצה</a>
+      <details class="more-fields" style="margin-top:14px"><summary>איך ההודעה נראית</summary><pre class="wa-preview">${esc(weeklyWaText(w, (withPhone[0] || {}).name || ''))}</pre></details>`,
+    foot: `<button class="btn btn-ghost" data-close>סגירה</button>`,
+    onOpen(el) {
+      el.querySelectorAll('[data-wa]').forEach((a) => a.addEventListener('click', () => { a.classList.add('sent'); a.innerHTML = `${icon('check')}נפתח בוואטסאפ`; }));
+    },
+  });
+}
+
 function bulletList(items) {
   return items.length ? `<ul class="wk-list">${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="small muted">—</p>';
 }
@@ -121,6 +158,7 @@ Pages['bo-weekly'] = () => {
           ${isJorge() ? `<button class="btn btn-primary" id="wk-approve">${icon('check')}אישור לשליחה ב־17:00</button>
           <button class="btn btn-accent" id="wk-now">${icon('send')}שליחה עכשיו</button>` : ''}
         </div>
+        ${w && w.status === 'sent' ? `<div class="wa-cta"><span>הסיכום נשלח לפורטל. רוצים שהמשפחה תדע?</span><button class="btn btn-primary" id="wk-wa">${icon('whatsapp')}שליחה בוואטסאפ</button></div>` : ''}
         ${w && w.approvedBy ? `<p class="small muted" style="margin-bottom:0">אושר ע״י ${esc(w.approvedBy)}${w.approvedAt ? ` · ${fmtWhen(w.approvedAt.slice(0, 16).replace('T', ' '))}` : ''}</p>` : ''}
       </article>
       ${others.length ? `<div class="section-title" style="margin-top:22px"><h2>פרויקטים אחרים</h2></div>
@@ -179,14 +217,18 @@ Pages['bo-weekly'] = () => {
         if (Store.live) {
           Store.save();
           await Live.flush();
-          try { await Live.publishWeekly(d.project.id); await Live.open(d.project.id); toast('הסיכום נשלח, והמשפחה קיבלה מייל'); App.render(); return; }
-          catch (e) { toast('שליחת המייל לא הצליחה (' + e.message + '). הסיכום עלה לאפליקציה בלי מייל.'); }
+          // The email path (an edge function) is not deployed yet; the summary still goes up in the portal below.
+          try { await Live.publishWeekly(d.project.id); await Live.open(d.project.id); App.render(); toast('הסיכום עלה לפורטל'); weeklyWhatsApp(weeklyFor(Store.data, friday)); return; }
+          catch (e) { /* publish in the portal without email */ }
         }
         publishWeekly(d, cur);
         Store.save();
         App.render();
-        if (!Store.live) toast('הסיכום עלה לאפליקציה, והמשפחה קיבלה התראה');
+        toast('הסיכום עלה לפורטל. עכשיו אפשר לשלוח למשפחה בוואטסאפ.');
+        weeklyWhatsApp(cur);
       };
+      const wa = root.querySelector('#wk-wa');
+      if (wa) wa.onclick = () => weeklyWhatsApp(weeklyFor(d, friday));
       root.querySelectorAll('[data-wp]').forEach((b) => (b.onclick = () => {
         if (!Store.live) return toast('בהדגמה, רק "בית אברהמי" מלא בנתונים');
         Live.flush().then(() => Live.open(b.dataset.wp)).then(() => App.render());

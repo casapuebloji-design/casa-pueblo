@@ -176,10 +176,10 @@ Pages.home = () => {
           <h1>שלום משפחת ${esc(p.family)}</h1>
           <div class="lede">ברוכים הבאים לבית שלכם ב-CASA PUEBLO. כל הבית, כל הפרויקט, במקום אחד.</div>
           <div class="stage-band">
-            ${progressRing(p.progress, 74, 4, '#d4b483', 'rgba(242,235,223,.16)')}
+            <span class="stage-now" aria-hidden="true"><b>${actives.length || '—'}</b><small>${actives.length === 1 ? 'שלב' : 'שלבים'}</small></span>
             <div>
               <div class="lbl">${actives.length > 1 ? 'בביצוע עכשיו' : 'שלב נוכחי'}</div>
-              <div class="val">${actives.length > 2 ? `${actives.length} שלבים בביצוע` : esc(p.stage)}</div>
+              <div class="val" ${actives.length > 2 ? 'style="font-size:19px;line-height:1.35"' : ''}>${actives.length ? esc(actives.map((s) => s.name).join(' · ')) : esc(p.stage)}</div>
               <div class="stage-steps" aria-hidden="true">${d.timeline.map((s) => `<i class="${stageStatus(s)}" title="${esc(s.name)}"></i>`).join('')}</div>
               ${d.timeline.length ? `<div class="stage-names"><span>${esc(d.timeline[0].name)}</span><span>${esc(d.timeline[d.timeline.length - 1].name)}</span></div>` : ''}
             </div>
@@ -291,16 +291,15 @@ Pages.project = () => {
               <dt>משפחה</dt><dd>${esc(p.family)}</dd>
               <dt>כתובת</dt><dd>${esc(p.address)}</dd>
               <dt>היקף</dt><dd>${esc(p.area)}</dd>
-              <dt>שלב נוכחי</dt><dd>${esc(p.stage)} · ${p.progress}%</dd>
+              <dt>בביצוע עכשיו</dt><dd>${esc(p.stage)}</dd>
               <dt>תאריך התחלה</dt><dd>${fmtDate(p.start)}</dd>
               <dt>מסירה משוערת</dt><dd>${fmtDate(p.handover)}</dd>
             </dl>
             <p class="ink-2" style="margin-bottom:0">${esc(p.scope)}</p>
           </article>
           <article class="card card-pad">
-            <div class="card-head"><h3>התקדמות לפי שלבים</h3><a class="link-btn small" href="#/timeline">לשלבי העבודה</a></div>
-            <div class="progress dark" style="height:10px"><i style="width:${p.progress}%"></i></div>
-            <div class="legend-status" style="margin-top:12px">
+            <div class="card-head"><h3>שלבי העבודה</h3><a class="link-btn small" href="#/timeline">לשלבי העבודה</a></div>
+            <div class="legend-status">
               ${d.timeline.map((s) => `<span class="small">${statusPill(stageStatus(s)).replace(STATUS[stageStatus(s)][1], esc(s.name))}</span>`).join('')}
             </div>
           </article>
@@ -364,7 +363,7 @@ function setPlanExec(plan, exec) {
 function openPlan(id, vi = 0) {
   const plan = Store.data.plans.find((p) => p.id === id);
   const v = plan.versions[vi];
-  const current = vi === 0;
+  const current = vi === 0 && !plan.outdated;
   const seed = Number(id.replace(/\D/g, '')) || 1;
   Store.log(`צפה ב-${plan.title} V${v.v}`);
   Store.save();
@@ -393,11 +392,25 @@ function openPlan(id, vi = 0) {
         ${plan.versions.map((x, i) => `<li><span class="v">V${x.v}</span><span class="d">${fmtDate(x.date)} · ${esc(x.by)}${x.note ? ` · ${esc(x.note)}` : ''}</span>${i === vi ? pill('blue', i === 0 ? 'נוכחית' : 'מוצגת') : `<button class="btn btn-sm btn-quiet" data-ver="${i}">צפייה</button>`}</li>`).join('')}
       </ul>`,
     foot: `${current && plan.status === 'pending' ? `<button class="btn btn-primary" id="pv-approve">${icon('check')}לאישור התכנית</button>` : ''}
+      ${current && plan.status === 'pending' && staffMode() ? `<button class="btn btn-ghost" id="pv-unask">ביטול בקשת האישור</button>` : ''}
+      ${current && staffMode() ? `<button class="btn btn-ghost" id="pv-retire">הוחלפה</button>` : ''}
+      ${plan.outdated && staffMode() ? `<button class="btn btn-ghost" id="pv-restore">החזרה ל"הכי מעודכן"</button>` : ''}
       ${shareButtons()}
       <button class="btn btn-ghost" id="pv-dl">${icon('download')}הורדה</button>`,
     onOpen(el) {
       const a = el.querySelector('#pv-approve');
       if (a) a.onclick = () => { closeModal(); approvePlanFlow(id); };
+      const un = el.querySelector('#pv-unask');
+      if (un) un.onclick = () => {
+        const t = Store.data.tasks.find((x) => !x.done && x.type === 'approval' && x.ref && x.ref.id === id);
+        if (!confirm('לבטל את בקשת האישור? היא תרד מהרשימה של המשפחה.')) return;
+        if (t) cancelApproval(t.id); else { plan.status = 'new'; Store.log(`ביטל את בקשת האישור ל-${plan.title}`); Store.save(); }
+        closeModal(); toast('בקשת האישור בוטלה'); App.render();
+      };
+      const rt = el.querySelector('#pv-retire');
+      if (rt) rt.onclick = () => { closeModal(); retirePlanFlow(id); };
+      const rs = el.querySelector('#pv-restore');
+      if (rs) rs.onclick = () => { closeModal(); restorePlan(id); };
       el.querySelectorAll('[data-exec]').forEach((b) => (b.onclick = () => {
         setPlanExec(plan, b.dataset.exec);
         closeModal();
@@ -443,31 +456,41 @@ function addPlanCategoryFlow() {
 }
 
 // "הכי מעודכן" (the default) shows only the current version of each plan. A plan replaced by a newer one
-// keeps its file as an earlier version, shown under "הכל" and in its own category.
+// keeps its file as an earlier version, shown only in its own category, under "גרסאות קודמות".
 Pages.plans = (q) => {
   const d = Store.data;
   const cats = planCategories(d);
-  const cat = q.cat || 'latest';
-  const inCat = (p) => cat === 'latest' || cat === 'הכול' || p.cat === cat;
-  const list = d.plans.filter(inCat)
+  const cat = q.cat && q.cat !== 'הכול' ? q.cat : 'latest';
+  const inCat = (p) => cat === 'latest' || p.cat === cat;
+  const oneCat = cat !== 'latest';
+  const sub = oneCat && q.sub === 'old' ? 'old' : 'cur';
+  // Earlier versions of each plan, plus plans taken out of "הכי מעודכן" (all their versions).
+  const oldOf = (p) => (p.outdated ? p.versions.map((v, i) => ({ p, v, i })) : p.versions.slice(1).map((v, i) => ({ p, v, i: i + 1 })));
+  const nOldOf = (ps) => ps.reduce((n, p) => n + oldOf(p).length, 0);
+  const list = (sub === 'old' ? [] : d.plans.filter((p) => inCat(p) && !p.outdated))
     .sort((a, b) => (a.exec === 'approved' ? 0 : 1) - (b.exec === 'approved' ? 0 : 1) || b.versions[0].date.localeCompare(a.versions[0].date));
-  const older = cat === 'latest' ? [] : d.plans.filter(inCat).flatMap((p) => p.versions.slice(1).map((v, i) => ({ p, v, i: i + 1 }))).sort((a, b) => b.v.date.localeCompare(a.v.date));
-  const nOld = d.plans.reduce((n, p) => n + p.versions.length - 1, 0);
+  const older = sub === 'cur' ? [] : d.plans.filter(inCat).flatMap(oldOf).sort((a, b) => b.v.date.localeCompare(a.v.date));
+  const nCur = (ps) => ps.filter((p) => !p.outdated).length;
+  const staff = staffMode();
   const pending = d.plans.filter((p) => p.status === 'pending').length;
   const approver = canApprovePlans();
   return {
     title: 'תכניות',
     html: `
-      <div class="page-head"><div><h1>תכניות</h1><p>${cat === 'latest' ? 'רק התכניות המעודכנות ביותר. גרסאות שהוחלפו נמצאות ב"הכל".' : 'התכניות העדכניות למעלה, והגרסאות הקודמות מתחת'}</p></div>
+      <div class="page-head"><div><h1>תכניות</h1><p>${cat === 'latest' ? 'רק התכניות המעודכנות ביותר. גרסאות שהוחלפו נשמרות בקטגוריה שלהן, תחת "גרסאות קודמות".' : `${esc(cat)}: ${sub === 'old' ? 'הגרסאות שהוחלפו' : 'התכניות המעודכנות'}`}</p></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${pending ? pill('red', `${pending} ממתינות לאישורכם`) : ''}
           ${d.plans.length ? `<button class="btn btn-ghost" id="pl-ver">${icon('layers')}גרסה חדשה</button>` : ''}
           <button class="btn btn-accent" id="pl-up">${icon('upload')}העלאת תכנית</button></div></div>
       <div class="chips" role="group" aria-label="סינון לפי קטגוריה">
-        <button class="chip chip-latest" aria-pressed="${cat === 'latest'}" data-cat="latest">${icon('check', 'xs')}הכי מעודכן<span class="n">${d.plans.length}</span></button>
-        ${['הכול', ...cats].map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c === 'הכול' ? 'הכל' : c)}<span class="n">${c === 'הכול' ? d.plans.length + nOld : d.plans.filter((p) => p.cat === c).length}</span></button>`).join('')}
+        <button class="chip chip-latest" aria-pressed="${cat === 'latest'}" data-cat="latest">${icon('check', 'xs')}הכי מעודכן<span class="n">${nCur(d.plans)}</span></button>
+        ${cats.map((c) => `<button class="chip" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c)}<span class="n">${nCur(d.plans.filter((p) => p.cat === c))}</span></button>`).join('')}
         <button class="chip" id="pc-add">${icon('plus', 'xs')} קטגוריה</button>
       </div>
-      <div class="card">
+      ${oneCat ? (() => { const inC = d.plans.filter((p) => p.cat === cat); return `<div class="seg pl-sub" role="group" aria-label="בתוך הקטגוריה">
+        <button aria-pressed="${sub === 'cur'}" data-sub="cur">מעודכן ביותר · ${nCur(inC)}</button>
+        <button aria-pressed="${sub === 'old'}" data-sub="old">גרסאות קודמות · ${nOldOf(inC)}</button>
+      </div>`; })() : ''}
+      ${sub === 'old' ? '' : `<div class="card">
         <ul class="rows">
           ${list.map((p) => {
             const v = p.versions[0];
@@ -478,26 +501,31 @@ Pages.plans = (q) => {
                 <div class="sub">${esc(p.cat)} · גרסה ${v.v} · ${fmtDate(v.date)}</div>
               </div>
               <div class="end">${execPill(p)}${p.status === 'pending' ? statusPill('pending') : ''}
-                ${p.status === 'pending' ? `<button class="btn btn-sm btn-primary" data-approve="${p.id}">לאישור</button>` : ''}</div>
+                ${p.status === 'pending' ? `<button class="btn btn-sm btn-primary" data-approve="${p.id}">לאישור</button>` : ''}
+                ${staff ? `<button class="btn btn-sm btn-quiet" data-retire="${p.id}" title="הוחלפה: להוציא מ'הכי מעודכן'">הוחלפה</button>` : ''}</div>
             </li>`;
           }).join('') || '<li class="empty">אין תכניות בקטגוריה זו</li>'}
         </ul>
-      </div>
-      ${older.length ? `<div class="section-title" style="margin-top:26px"><h2>גרסאות קודמות</h2><span class="small muted">${older.length} גרסאות שהוחלפו</span></div>
+      </div>`}
+      ${sub === 'old' && !older.length ? '<div class="card"><div class="empty">אין גרסאות קודמות בקטגוריה זו</div></div>' : ''}
+      ${older.length ? `<div class="section-title" style="margin-top:${sub === 'old' ? 0 : 26}px"><h2>גרסאות קודמות</h2><span class="small muted">${older.length} גרסאות שהוחלפו</span></div>
       <div class="card older-plans"><ul class="rows">
         ${older.map(({ p, v, i }) => `<li class="row clickable compact" data-old="${p.id}" data-i="${i}">
           ${fileIco(v.file)}
           <div class="main-col"><div class="title">${esc(v.title || p.title)} · גרסה ${v.v}</div><div class="sub">${esc(p.cat)} · ${fmtDate(v.date)}${v.note ? ` · ${esc(v.note)}` : ''}</div></div>
-          <div class="end">${pill('gray', 'הוחלפה')}</div>
+          <div class="end">${pill('gray', 'הוחלפה')}${staff && p.outdated && i === 0 ? `<button class="btn btn-sm btn-quiet" data-restore="${p.id}">החזרה ל"הכי מעודכן"</button>` : ''}</div>
         </li>`).join('')}
       </ul></div>` : ''}`,
     mount(root) {
       root.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => App.go('plans', { cat: b.dataset.cat })));
-      root.querySelectorAll('[data-plan]').forEach((r) => (r.onclick = (e) => { if (!e.target.closest('[data-approve]')) openPlan(r.dataset.plan); }));
-      root.querySelectorAll('[data-old]').forEach((r) => (r.onclick = () => openPlan(r.dataset.old, +r.dataset.i)));
+      root.querySelectorAll('[data-sub]').forEach((b) => (b.onclick = () => App.go('plans', { cat, sub: b.dataset.sub === 'old' ? 'old' : '' }, true)));
+      root.querySelectorAll('[data-plan]').forEach((r) => (r.onclick = (e) => { if (!e.target.closest('[data-approve],[data-retire]')) openPlan(r.dataset.plan); }));
+      root.querySelectorAll('[data-retire]').forEach((b) => (b.onclick = () => retirePlanFlow(b.dataset.retire)));
+      root.querySelectorAll('[data-restore]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); restorePlan(b.dataset.restore); }));
+      root.querySelectorAll('[data-old]').forEach((r) => (r.onclick = (e) => { if (!e.target.closest('[data-restore]')) openPlan(r.dataset.old, +r.dataset.i); }));
       root.querySelectorAll('[data-approve]').forEach((b) => (b.onclick = () => approvePlanFlow(b.dataset.approve)));
       root.querySelector('#pc-add').onclick = addPlanCategoryFlow;
-      root.querySelector('#pl-up').onclick = () => ACTIONS.plan();
+      root.querySelector('#pl-up').onclick = () => ACTIONS.plan(oneCat ? cat : undefined);
       const pv = root.querySelector('#pl-ver');
       if (pv) pv.onclick = () => ACTIONS.version();
       if (q.id) { history.replaceState(null, '', '#/plans'); openPlan(q.id); }
@@ -710,15 +738,12 @@ Pages.timeline = () => {
   const n = (k) => tl.filter((s) => stageKey(s) === k).length;
   const act = tl.filter(stageOn);
   const upNext = tl.filter((s) => s.next && stageKey(s) === 'future');
-  const pctDone = Math.round(n('done') / tl.length * 100);
   return {
     title: 'שלבי עבודה',
     html: `
       <div class="page-head"><div><h1>שלבי העבודה</h1><p>מה מתבצע בבית עכשיו, בזמן אמת</p></div>
-        ${App.isStaffView() ? `<button class="btn btn-accent" id="st-edit">${icon('edit')}עדכון שלבים</button>` : ''}</div>
+        ${staffMode() ? `<button class="btn btn-accent" id="st-edit">${icon('edit')}עדכון שלבים</button>` : ''}</div>
       <article class="card card-pad st-sum">
-        <div class="split"><b>${n('done')} מתוך ${tl.length} שלבים הסתיימו</b><b class="num">${pctDone}%</b></div>
-        <div class="progress dark" style="margin:10px 0 14px"><i style="width:${pctDone}%"></i></div>
         <div class="st-legend"><span class="st-chip future">טרם התחיל · ${n('future')}</span><span class="st-chip start">התחלה · ${n('start')}</span><span class="st-chip active">בביצוע · ${n('active')}</span><span class="st-chip done">הסתיים · ${n('done')}</span></div>
       </article>
       ${act.length ? `<div class="section-title" style="margin-top:24px"><h2>בביצוע עכשיו</h2></div>
@@ -787,7 +812,7 @@ Pages.photos = (q) => {
           <h3>${esc(u.title)}</h3>
           ${u.desc ? `<p>${esc(u.desc)}</p>` : ''}
           ${(u.log || []).filter((e) => e.text).map((e) => `<p class="jlog"><span class="jlog-d">${fmtDateShort(e.date)}</span>${esc(e.text)}</p>`).join('')}
-          ${App.isStaffView() ? `<div class="jentry-actions"><button class="link-btn small" data-addph="${esc(u.id)}">${icon('plus')}הוספת תמונות וטקסט</button><button class="link-btn small" data-edtxt="${esc(u.id)}">${icon('edit')}עריכת הטקסטים</button></div>` : ''}
+          ${staffMode() ? `<div class="jentry-actions"><button class="link-btn small" data-addph="${esc(u.id)}">${icon('plus')}הוספת תמונות וטקסט</button><button class="link-btn small" data-edtxt="${esc(u.id)}">${icon('edit')}עריכת הטקסטים</button></div>` : ''}
           <div class="mosaic" data-n="${Math.min(u.photos.length, 5)}">${u.photos.map((src) => tile(u, src)).join('')}</div>
         </div>
       </article>`;
@@ -1032,6 +1057,7 @@ Pages.tasks = () => {
       <span class="ico ${t.done ? 'green' : t.level}">${icon(t.done ? 'check' : t.type === 'approval' ? 'check' : t.type === 'choice' ? 'materials' : 'info')}</span>
       <div class="txt"><b>${esc(t.title)}</b><span>${esc(t.sub)}</span></div>
       ${t.done ? pill('green', 'בוצע') : `<button class="btn btn-sm ${t.level === 'red' ? 'btn-primary' : 'btn-ghost'}" data-task="${t.id}">${t.type === 'approval' ? 'לאישור' : 'פתיחה'}</button>`}
+      ${!t.done && staffMode() && !(t.ref && t.ref.page === 'change') ? `<button class="btn btn-sm btn-quiet" data-cancel-task="${t.id}" title="רק הצוות רואה">ביטול הבקשה</button>` : ''}
     </li>`;
   return {
     title: 'משימות ואישורים',
@@ -1043,9 +1069,60 @@ Pages.tasks = () => {
       ${done.length ? `<article class="card card-pad" style="margin-top:14px"><h3 style="margin-bottom:8px">בוצעו</h3><ul class="action-list">${done.map(row).join('')}</ul></article>` : ''}`,
     mount(root) {
       root.querySelectorAll('[data-task]').forEach((b) => (b.onclick = () => openTaskRef(Store.data.tasks.find((t) => t.id === b.dataset.task))));
+      root.querySelectorAll('[data-cancel-task]').forEach((b) => (b.onclick = () => cancelApprovalFlow(b.dataset.cancelTask)));
     },
   };
 };
+
+/* ---------- מדריך לפורטל ---------- */
+// For the family, once inside: what is in each area, everyday use, the home-screen icon and a forgotten password.
+// The first login (the English email) is explained in the WhatsApp message they get with the invitation.
+const HELP_AREAS = [
+  ['home', 'ראשי', 'הסיכום השבועי, השלבים שבביצוע עכשיו ומה מחכה לכם.'],
+  ['timeline', 'שלבי עבודה', 'מה מתבצע בבית עכשיו, מה הסתיים ומה הבא בתור.'],
+  ['photos', 'תמונות ויומן', 'תמונות מהשטח עם הסבר, לפי תאריך או לפי שלב. לחיצה על תמונה מגדילה אותה.'],
+  ['plans', 'תכניות', '"הכי מעודכן" מציג רק את התכניות העדכניות. גרסאות קודמות נשמרות בקטגוריה, תחת "גרסאות קודמות".'],
+  ['materials', 'חומרים ובחירות', 'החומרים והמוצרים של הבית, ומה עוד מחכה לבחירה שלכם.'],
+  ['tasks', 'משימות ואישורים', 'מה מחכה להחלטה שלכם. לוחצים "לאישור", עוברים על הפרטים ומאשרים.'],
+  ['finance', 'כספים ותשלומים', 'התשלומים לפי ההסכם, מה שולם, השינויים והתוספות והחשבוניות.'],
+  ['documents', 'מסמכים והסכמים', 'ההסכם, ההיתרים ושאר המסמכים. אפשר לצפות, להוריד ולשלוח.'],
+  ['project', 'הפרויקט שלי', 'פרטי הפרויקט ואנשי הקשר.'],
+  ['pros', 'בעלי מקצוע', 'בעלי המקצוע בפרויקט, עם טלפון ווואטסאפ.'],
+  ['service', 'אחריות', 'האחריות על העבודות והמוצרים, ופנייה לשירות.'],
+];
+Pages.help = () => ({
+  title: 'מדריך לפורטל',
+  html: `
+    <div class="page-head"><div><h1>מדריך לפורטל</h1><p>כל מה שצריך כדי להשתמש באזור האישי של הפרויקט</p></div></div>
+    <div class="help">
+      <article class="card card-pad help-wide">
+        <h3>מה יש בכל אזור</h3>
+        <ul class="help-areas">${HELP_AREAS.map(([p, t, x]) => `<li><a href="#/${p}">${esc(t)}</a><span>${esc(x)}</span></li>`).join('')}</ul>
+      </article>
+      <article class="card card-pad">
+        <h3>ביום־יום</h3>
+        <ul class="help-list">
+          <li>בכל שבוע עולה <b>סיכום שבועי</b> עם תמונות, ותקבלו עליו הודעה בוואטסאפ.</li>
+          <li>הפעמון למעלה מראה <b>התראות</b>: תכנית חדשה, בקשת אישור, עדכון.</li>
+          <li>הזכוכית המגדלת היא <b>חיפוש</b> בכל הפורטל: תכנית, חומר, מסמך או בעל מקצוע.</li>
+          <li>אפשר לעבור בין <b>טאבים למעלה</b> ל<b>תפריט צד</b> בכפתור שליד הפעמון.</li>
+        </ul>
+      </article>
+      <article class="card card-pad">
+        <h3>אייקון במסך הבית</h3>
+        <p><b>אייפון ואייפד:</b> פותחים את הפורטל ב־Safari, לוחצים על כפתור השיתוף (ריבוע עם חץ למעלה), ואז "הוספה למסך הבית".</p>
+        <p><b>אנדרואיד:</b> פותחים את הפורטל ב־Chrome, לוחצים על שלוש הנקודות למעלה, ואז "הוספה למסך הבית" או "התקנת אפליקציה".</p>
+        <p class="help-note">באייפון, מהאייקון שבמסך הבית נכנסים עם המייל והסיסמה. קישור מהמייל תמיד נפתח בדפדפן.</p>
+      </article>
+      <article class="card card-pad">
+        <h3>שכחתם סיסמה?</h3>
+        <p>במסך הכניסה מזינים את המייל ולוחצים "שליחת קישור כניסה למייל". אחרי הכניסה בוחרים סיסמה חדשה בכפתור המפתח שבראש המסך.</p>
+        <h3 style="margin-top:16px">שאלות?</h3>
+        <p style="margin-bottom:0">פונים אלינו, לחורחה או לצוות קאסה פואבלו, בטלפון או בוואטסאפ.</p>
+      </article>
+    </div>`,
+  mount() {},
+});
 
 /* ---------- התראות ---------- */
 Pages.notifications = () => {
