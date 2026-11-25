@@ -960,3 +960,45 @@ fieldset.inv-pays legend { font-size: 13px; font-weight: 600; color: var(--ink-2
 .wa-preview { white-space: pre-wrap; font: inherit; font-size: 14px; background: var(--sand, #f3efe8); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0 0; direction: rtl; text-align: right; }
 
 .inv-people .check-row + .check-row { border-top: 1px solid var(--line); }
+
+/* Back Office actions by topic */
+.act-groups { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.act-group { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px 16px; }
+.act-group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.act-group-head h3 { font-size: 15px; margin: 0; color: var(--navy); }
+.act-group .actions-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.action-list li .btn-quiet { margin-inline-start: auto; }
+
+/* Staff tools on the client pages */
+.stf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin: 0 0 18px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px dashed var(--gold, #d4b483); background: rgba(212, 180, 131, .1); }
+.stf-lbl { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.stf-lbl .i { width: 16px; height: 16px; color: var(--gold, #d4b483); }
+.stf-hint { font-size: 12px; opacity: .7; }
+.stf-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Client navigation groups */
+.navtabs .nav-sep { flex: 0 0 1px; align-self: center; height: 20px; background: var(--line); margin: 0 4px; }
+.more-sheet .more-grp { grid-column: 1 / -1; font-size: 12px; letter-spacing: .04em; opacity: .7; margin: 8px 2px -2px; }
+.more-sheet .more-grp:first-child { margin-top: 0; }
+
+/* Plans: inside a category */
+.pl-sub { margin: 4px 0 14px; }
+
+/* Home: stages running now (instead of a percentage) */
+.stage-now { flex: 0 0 74px; width: 74px; height: 74px; border-radius: 50%; border: 2px solid rgba(212, 180, 131, .6); display: grid; place-content: center; text-align: center; color: #d4b483; line-height: 1; }
+.stage-now b { font-size: 24px; font-weight: 700; }
+.stage-now small { display: block; font-size: 11px; margin-top: 3px; letter-spacing: .05em; }
+
+/* Guide */
+.help { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.help h3 { margin: 0 0 10px; }
+.help p { line-height: 1.65; }
+.help-wide { grid-column: 1 / -1; }
+.help-steps { margin: 0; padding-inline-start: 22px; line-height: 1.7; }
+.help-steps li + li { margin-top: 6px; }
+.help-list { margin: 0; padding-inline-start: 20px; line-height: 1.7; }
+.help-note { font-size: 13.5px; opacity: .8; margin: 12px 0 0; padding: 8px 12px; border-inline-start: 3px solid var(--gold, #d4b483); background: rgba(212, 180, 131, .08); border-radius: 4px; }
+.help-areas { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px 20px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.help-areas li { display: flex; flex-direction: column; padding: 8px 0; border-top: 1px solid var(--line); }
+.help-areas a { font-weight: 700; color: inherit; }
+.help-areas span { font-size: 14px; opacity: .8; }

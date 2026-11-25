@@ -1,7 +1,7 @@
 /* Back office for Casa Pueblo staff. */
 
 // validate(vals) may return an error message: it is shown in the form, and the form stays open.
-function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, validate }) {
+function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, validate, onOpen: extraOpen }) {
   const fieldHtml = (f) => {
     const v = f.value == null ? '' : f.value;
     if (f.type === 'select') return `<label class="field"><span>${esc(f.label)}</span><select class="input" name="${f.id}">${f.options.map((o) => { const [val, lab] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(lab)}</option>`; }).join('')}</select></label>`;
@@ -42,6 +42,7 @@ function formModal({ title, intro = '', fields, submit = 'שמירה', onSave, v
         if (msg) toast(msg);
         App.render();
       };
+      if (extraOpen) extraOpen(el);
     },
   });
 }
@@ -136,8 +137,7 @@ Pages['bo-home'] = (q) => {
             <div class="body">
               <div class="split"><h3>${esc(p.name)}</h3><span class="small muted">${esc(p.city)}</span></div>
               <div class="small ink-2">${esc(p.client)} · מנהל: ${esc(p.pm)}</div>
-              <div class="split small" style="margin-top:10px"><span>${esc(p.stage)}</span><b class="num">${p.progress}%</b></div>
-              <div class="progress dark" style="margin-top:4px"><i style="width:${p.progress}%"></i></div>
+              <div class="small" style="margin-top:10px"><span class="muted">בביצוע:</span> ${esc(p.stage)}</div>
               <div class="meta">
                 <div><b>${p.openTasks}</b><span>משימות פתוחות</span></div>
                 <div><b class="${p.pendingApprovals ? 'alert' : ''}">${p.pendingApprovals}</b><span>ממתינים ללקוח</span></div>
@@ -169,22 +169,103 @@ Pages['bo-home'] = (q) => {
 /* ---------- ניהול פרויקט ---------- */
 const MAX_PHOTOS = 30; // per photo update
 const MAX_VIDEO_MB = 200; // the storage bucket's per-file limit (Pro plan; the project's global limit must be at least this)
-const PROJECT_ACTIONS = [
-  ['weekly', 'send', 'הסיכום השבועי'],
-  ['timeline', 'timeline', 'שלבי עבודה'],
-  ['details', 'edit', 'עריכת פרטי פרויקט'],
-  ['plan', 'plans', 'העלאת תכנית'],
-  ['version', 'layers', 'העלאת גרסה חדשה'],
-  ['approval', 'check', 'בקשת אישור מהלקוח'],
-  ['task', 'tasks', 'משימה ללקוח'],
-  ['material', 'materials', 'הוספת חומר ו/או מוצר'],
-  ['photos', 'camera', 'העלאת תמונות'],
-  ['doc', 'documents', 'העלאת מסמך'],
-  ['payment', 'finance', 'תשלומים לפי ההסכם'],
-  ['change', 'plus', 'שינוי / תוספת'],
-  ['pro', 'pros', 'הוספת בעל מקצוע'],
-  ['member', 'users', 'הזמנת משתמש לפרויקט'],
+// The Back Office actions by topic, in the same order as the client's areas. Each group links to the client page it fills.
+const ACTION_GROUPS = [
+  ['מה קורה בשטח', 'photos', 'יומן התמונות', [['photos', 'camera', 'העלאת תמונות'], ['timeline', 'timeline', 'עדכון שלבי עבודה'], ['weekly', 'send', 'הסיכום השבועי']]],
+  ['תכנון ובחירות', 'plans', 'התכניות', [['plan', 'plans', 'העלאת תכנית'], ['version', 'layers', 'גרסה חדשה לתכנית'], ['material', 'materials', 'הוספת חומר ו/או מוצר']]],
+  ['מול הלקוח', 'tasks', 'משימות ואישורים', [['approval', 'check', 'בקשת אישור מהלקוח'], ['task', 'tasks', 'משימה ללקוח']]],
+  ['כסף ומסמכים', 'finance', 'הכספים', [['payment', 'finance', 'תשלומים וחשבוניות'], ['change', 'plus', 'שינוי / תוספת'], ['doc', 'documents', 'העלאת מסמך']]],
+  ['הפרויקט והצוות', 'project', 'הפרויקט', [['details', 'edit', 'עריכת פרטי פרויקט'], ['member', 'users', 'הזמנת המשפחה לפורטל'], ['pro', 'pros', 'הוספת בעל מקצוע']]],
 ];
+const PROJECT_ACTIONS = ACTION_GROUPS.flatMap((g) => g[3]);
+const actionAllowed = (k) => !JORGE_ACTIONS.includes(k) || isJorge();
+
+// Staff viewing the client pages: a bar with the tools for that page (the family does not see it).
+// Pages that already have their own upload button (plans, photos, pros) only get what is missing there.
+const PAGE_TOOLS = {
+  home: ['weekly', 'photos', 'timeline'], timeline: ['timeline'], photos: [], plans: ['approval'], materials: ['material'],
+  tasks: ['approval', 'task'], todo: [], finance: ['payment', 'change'], documents: ['doc'], project: ['details', 'member', 'pro'], pros: [], service: [], help: ['member'],
+};
+function staffBar(page) {
+  const acts = (PAGE_TOOLS[page] || []).filter(actionAllowed).map((k) => PROJECT_ACTIONS.find((a) => a[0] === k)).filter(Boolean);
+  return `<div class="stf-bar" role="region" aria-label="כלי צוות">
+    <span class="stf-lbl">${icon('edit')}<b>כלי צוות</b><span class="stf-hint">המשפחה לא רואה את השורה הזאת</span></span>
+    <span class="stf-acts">${acts.map(([k, ic, l]) => `<button class="btn btn-sm btn-accent" data-stf="${k}">${icon(ic)}${esc(l)}</button>`).join('')}
+      <button class="btn btn-sm btn-ghost" data-stf-bo>${icon('grid')}Back Office</button></span>
+  </div>`;
+}
+function bindStaffBar(app) {
+  app.querySelectorAll('[data-stf]').forEach((b) => (b.onclick = () => ACTIONS[b.dataset.stf]()));
+  const bo = app.querySelector('[data-stf-bo]');
+  if (bo) bo.onclick = () => { Store.session.view = 'staff'; Store.save(); App.go('bo-project'); };
+}
+function viewAsClient(page) { Store.session.view = 'client'; Store.save(); App.go(page); }
+
+// Take back an approval request sent by mistake: the task disappears from the family's list,
+// and a plan that waited for it goes back to a plain "new" plan.
+function cancelApproval(taskId) {
+  const d = Store.data;
+  const t = d.tasks.find((x) => x.id === taskId);
+  if (!t) return;
+  d.tasks = d.tasks.filter((x) => x !== t);
+  const p = t.ref && t.ref.page === 'plans' && d.plans.find((x) => x.id === t.ref.id);
+  if (p && !d.tasks.some((x) => !x.done && x.type === 'approval' && x.ref && x.ref.id === p.id)) p.status = 'new';
+  Store.log(`ביטל את בקשת האישור: ${t.title}`);
+  Store.save();
+}
+function cancelApprovalFlow(taskId) {
+  const t = Store.data.tasks.find((x) => x.id === taskId);
+  if (!t || !confirm(`לבטל את הבקשה "${t.title}"? היא תרד מהרשימה של המשפחה.`)) return;
+  cancelApproval(taskId);
+  toast('הבקשה בוטלה');
+  App.render();
+}
+
+// A plan that a newer one replaced: its file joins the newer plan as an earlier version,
+// or (with no replacing plan) it just leaves "הכי מעודכן" and stays in its category as an old plan.
+function retirePlanFlow(id) {
+  const d = Store.data;
+  const old = d.plans.find((p) => p.id === id);
+  if (!old) return;
+  const others = d.plans.filter((p) => p.id !== id && !p.outdated).sort((a, b) => (a.cat === old.cat ? 0 : 1) - (b.cat === old.cat ? 0 : 1));
+  formModal({
+    title: 'הוצאה מ"הכי מעודכן"',
+    intro: `"${esc(old.title)}" תרד מ"הכי מעודכן" ותישאר בקטגוריה ${esc(old.cat)} תחת "גרסאות קודמות". הקובץ לא נמחק.`,
+    fields: [{ id: 'by', label: 'איזו תכנית מחליפה אותה?', type: 'select', value: '',
+      options: [['', 'אף אחת. רק להוציא מ"הכי מעודכן"'], ...others.map((p) => [p.id, `${p.cat} · ${p.title} (V${p.versions[0].v})`])] }],
+    submit: 'הוצאה',
+    onSave(v) {
+      d.tasks = d.tasks.filter((t) => !(t.type === 'approval' && !t.done && t.ref && t.ref.id === old.id));
+      const target = v.by && d.plans.find((p) => p.id === v.by);
+      if (target) {
+        [old, target].forEach((p) => p.versions.forEach((x) => { if (!x.title) x.title = p.title; }));
+        const all = [...target.versions, ...old.versions];
+        all.forEach((x, i) => { x.v = all.length - i; });
+        if (!target.versions[0].note || target.versions[0].note === 'גרסה ראשונה') target.versions[0].note = `מחליפה את "${old.title}"`;
+        target.versions = all;
+        d.plans = d.plans.filter((p) => p !== old);
+        d.tasks.forEach((t) => { if (t.ref && t.ref.id === old.id) t.ref = { ...t.ref, id: target.id }; });
+        Store.log(`סימן ש"${target.title}" מחליפה את "${old.title}"`);
+        Store.save();
+        return `"${old.title}" נשמרה כגרסה קודמת של "${target.title}"`;
+      }
+      old.outdated = true;
+      old.status = 'new';
+      Store.log(`הוציא את "${old.title}" מ"הכי מעודכן"`);
+      Store.save();
+      return 'התכנית ירדה מ"הכי מעודכן" ונשארה בקטגוריה שלה';
+    },
+  });
+}
+function restorePlan(id) {
+  const p = Store.data.plans.find((x) => x.id === id);
+  if (!p) return;
+  delete p.outdated;
+  Store.log(`החזיר את "${p.title}" ל"הכי מעודכן"`);
+  Store.save();
+  toast('התכנית חזרה ל"הכי מעודכן"');
+  App.render();
+}
 
 // Back Office actions only Jorge sees (permissions questionnaire).
 const JORGE_ACTIONS = ['details', 'payment', 'change', 'member'];
@@ -535,7 +616,7 @@ function updateTextForm(id) {
 }
 
 const ACTIONS = {
-  weekly() { App.go('bo-weekly'); },
+  weekly() { Store.session.view = 'staff'; Store.save(); App.go('bo-weekly'); },
   weeklyText() {
     const p = Store.data.project;
     formModal({
@@ -620,19 +701,31 @@ const ACTIONS = {
       },
     });
   },
-  plan() {
-    const plans = Store.data.plans;
+  plan(cat) {
+    const plans = Store.data.plans.filter((p) => !p.outdated);
     formModal({
       title: 'העלאת תכנית',
       fields: [
-        { id: 'cat', label: 'קטגוריה', type: 'select', options: planCategories(Store.data) },
+        { id: 'cat', label: 'קטגוריה', type: 'select', options: planCategories(Store.data), value: cat || '' },
         { id: 'title', label: 'שם התכנית', required: true },
         // A newer plan takes the old one's place in "הכי מעודכן"; the old file stays, as an earlier version.
-        ...(plans.length ? [{ id: 'replaces', label: 'האם היא מחליפה תכנית קיימת?', type: 'select', value: '',
-          options: [['', 'לא, זו תכנית חדשה'], ...plans.map((p) => [p.id, `מחליפה את: ${p.cat} · ${p.title} (V${p.versions[0].v})`])] }] : []),
+        ...(plans.length ? [{ id: 'replaces', label: 'האם היא מחליפה תכנית קיימת בקטגוריה?', type: 'select', value: '',
+          options: [['', 'לא, זו תכנית חדשה']] }] : []),
         { id: 'file', label: 'קובץ', type: 'file', accept: '.pdf,.dwg,.dwf,.xls,.xlsx,image/*' },
         { id: 'approve', label: 'לבקש אישור מהלקוח', type: 'checkbox', value: true },
       ],
+      // "מחליפה תכנית קיימת?" lists the plans of the chosen category (the old one stays there, under "גרסאות קודמות").
+      onOpen(el) {
+        const c = el.querySelector('[name="cat"]'), r = el.querySelector('[name="replaces"]');
+        if (!c || !r) return;
+        const fill = () => {
+          const same = plans.filter((p) => p.cat === c.value);
+          r.innerHTML = [['', same.length ? 'לא, זו תכנית חדשה' : 'לא, זו תכנית חדשה (אין עוד תכניות בקטגוריה)'], ...same.map((p) => [p.id, `מחליפה את: ${p.title} (V${p.versions[0].v})`])]
+            .map(([val, lab]) => `<option value="${esc(val)}">${esc(lab)}</option>`).join('');
+        };
+        c.addEventListener('change', fill);
+        fill();
+      },
       submit: 'העלאה',
       onSave(v) { return withUpload(async () => {
         const f = v.file[0];
@@ -652,7 +745,7 @@ const ACTIONS = {
           Store.log(`העלה תכנית מעודכנת: ${v.title} (V${nv})${v.approve ? ' וביקש אישור' : ''}`, TEAM.architect.name);
           Store.notify(`עודכנה תכנית: ${v.title}${v.approve ? ' – נדרש אישורך' : ''}`, 'plans');
           Store.save();
-          return 'התכנית המעודכנת הועלתה. הקודמת עברה ל"הכל", כגרסה קודמת.';
+          return 'התכנית המעודכנת נכנסה ל"הכי מעודכן". הקודמת נשארה בקטגוריה, תחת "גרסאות קודמות".';
         }
         const id = 'pl' + Date.now();
         Store.data.plans.unshift({ id, cat: v.cat, title: v.title, status: v.approve ? 'pending' : 'new', exec: 'draft', versions: [{ v: 1, date: TODAY, by: uploaderName(), note: 'גרסה ראשונה', path, file: f ? f.name.split('.').pop().toUpperCase().slice(0, 4) : 'PDF', size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—' }] });
@@ -831,19 +924,22 @@ Pages['bo-project'] = () => {
         <button class="btn btn-ghost" id="as-client">${icon('eye')}צפייה כלקוח</button>
       </div>
       <div class="kpis four">
-        <div class="card stat"><div class="k">שלב</div><div class="v" style="font-size:20px">${esc(p.stage)}</div><div class="s">${p.progress}% התקדמות</div></div>
+        ${(() => { const on = d.timeline.filter((s) => ['start', 'active', 'delay'].includes(stageStatus(s))).length; return `<div class="card stat"><div class="k">שלבי עבודה</div><div class="v" style="font-size:20px">${esc(p.stage)}</div><div class="s">${on ? `${on} בביצוע עכשיו` : 'אין שלב בביצוע'}</div></div>`; })()}
         <div class="card stat ${open.some((t) => t.level === 'red') ? 'alert' : ''}"><div class="k">ממתין ללקוח</div><div class="v">${open.length}</div><div class="s">${open.filter((t) => t.type === 'approval').length} אישורים</div></div>
         <div class="card stat"><div class="k">עדכון שבועי אחרון</div><div class="v" style="font-size:20px">${fmtDate(p.weekly.updated)}</div><div class="s">לפני ${daysBetween(p.weekly.updated, TODAY)} ימים</div></div>
         ${(() => { const cm = casaModel(d); return `<div class="card stat"><div class="k">שולם מההסכם</div><div class="v">${shareOf(cm.paid, cm.contract)}</div><div class="s">${ils(cm.paid)} מתוך ${ils(cm.contract)}</div></div>`; })()}
       </div>
-      <div class="section-title"><h2>פעולות</h2></div>
-      <div class="actions-grid">
-        ${PROJECT_ACTIONS.filter(([k]) => !JORGE_ACTIONS.includes(k) || isJorge()).map(([k, ic, label]) => `<button class="action-tile" data-act="${k}">${icon(ic)}${esc(label)}</button>`).join('')}
+      <div class="section-title"><h2>פעולות</h2><span class="small muted">"לצפייה" פותח את הדף כמו שהמשפחה רואה אותו, עם כלי העריכה</span></div>
+      <div class="act-groups">
+        ${ACTION_GROUPS.map(([g, page, pageName, acts]) => { const ok = acts.filter(([k]) => actionAllowed(k)); return ok.length ? `<section class="act-group">
+          <div class="act-group-head"><h3>${esc(g)}</h3><button class="link-btn small" data-viewas="${page}">${icon('eye', 'xs')} לצפייה ב${esc(pageName)}</button></div>
+          <div class="actions-grid">${ok.map(([k, ic, label]) => `<button class="action-tile" data-act="${k}">${icon(ic)}${esc(label)}</button>`).join('')}</div>
+        </section>` : ''; }).join('')}
       </div>
       <div class="grid md-2" style="margin-top:18px">
         <article class="card card-pad">
           <div class="card-head"><h3>ממתין ללקוח</h3></div>
-          ${open.length ? `<ul class="action-list">${open.map((t) => `<li><span class="ico ${t.level}">${icon('clock')}</span><div class="txt"><b>${esc(t.title)}</b><span>${esc(t.sub)}</span></div></li>`).join('')}</ul>` : '<div class="empty">הלקוח סגר את כל המשימות</div>'}
+          ${open.length ? `<ul class="action-list">${open.map((t) => `<li><span class="ico ${t.level}">${icon('clock')}</span><div class="txt"><b>${esc(t.title)}</b><span>${esc(t.sub)}</span></div>${t.ref && t.ref.page === 'change' ? '' : `<button class="btn btn-sm btn-quiet" data-cancel-task="${esc(t.id)}" title="ביטול הבקשה">ביטול</button>`}</li>`).join('')}</ul>` : '<div class="empty">הלקוח סגר את כל המשימות</div>'}
         </article>
         ${Store.live ? `<article class="card card-pad" style="grid-column:1/-1">
           <div class="card-head"><h3>משתמשים בפרויקט</h3>${isJorge() ? `<button class="btn btn-sm btn-ghost" id="pm-add">${icon('plus')}הזמנה</button>` : ''}</div>
@@ -856,6 +952,8 @@ Pages['bo-project'] = () => {
       </div>`,
     mount(root) {
       root.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => ACTIONS[b.dataset.act]()));
+      root.querySelectorAll('[data-viewas]').forEach((b) => (b.onclick = () => viewAsClient(b.dataset.viewas)));
+      root.querySelectorAll('[data-cancel-task]').forEach((b) => (b.onclick = () => cancelApprovalFlow(b.dataset.cancelTask)));
       root.querySelector('#as-client').onclick = () => { Store.session.view = 'client'; Store.save(); App.go('home'); };
       if (Store.live) {
         const pa = root.querySelector('#pm-add');
@@ -904,7 +1002,44 @@ async function inviteFamilyFlow() {
         closeModal();
         App.render();
         toast(failed.length ? `נשלח ל: ${done.join(', ') || 'אף אחד'}. לא נשלח ל: ${failed.join(', ')}` : `ההזמנה נשלחה ל${done.join(' ול')}`);
+        const sent = chosen.filter((m) => done.includes(m.name || String(m.email).trim().toLowerCase()));
+        if (sent.length) inviteWhatsApp(sent);
       };
+    },
+  });
+}
+
+// The invitation email is in English (Supabase's own wording), so each family member also gets
+// the steps in Hebrew on WhatsApp, from Jorge's phone, with a link to the guide inside the portal.
+const PORTAL_APP_URL = 'https://casapuebloji-design.github.io/casa-pueblo/app.html';
+function inviteWaText(name = '') {
+  const first = String(name).trim().split(/\s+/)[0];
+  return [
+    `שלום${first ? ' ' + first : ''},`,
+    'הזמנו אתכם לאזור האישי של הפרויקט שלכם בקאסה פואבלו: תמונות מהשטח, שלבי העבודה, תכניות, מסמכים והסיכום השבועי.',
+    ['איך נכנסים בפעם הראשונה:',
+      '1. יגיע אליכם מייל מ־Casa Pueblo. הוא באנגלית. אם הוא לא בתיבה הראשית, בדקו בספאם או ב"קידומי מכירות".',
+      '2. לוחצים על הקישור שבמייל. הפורטל נפתח בעברית ומבקש לבחור סיסמה.',
+      `3. בוחרים סיסמה. מעכשיו נכנסים עם המייל והסיסמה כאן: ${PORTAL_APP_URL}`].join('\n'),
+    'כדאי להוסיף אייקון למסך הבית: באייפון, ב־Safari, כפתור השיתוף ואז "הוספה למסך הבית". באנדרואיד, ב־Chrome, שלוש הנקודות ואז "הוספה למסך הבית".',
+    'הקישור במייל עובד פעם אחת. אם הוא לא עובד, נכנסים לפורטל ולוחצים "שליחת קישור כניסה למייל".',
+    `מדריך קצר לשימוש בפורטל: ${PORTAL_APP_URL}#/help`,
+    `${(TEAM.pm && TEAM.pm.name) || 'חורחה'}, קאסה פואבלו`,
+  ].join('\n\n');
+}
+function inviteWhatsApp(people) {
+  const ok = (m) => String(m.phone || '').replace(/\D/g, '').length >= 9;
+  openModal({
+    title: 'הוראות כניסה בוואטסאפ',
+    body: `<p class="ink-2" style="margin-top:0">המייל שנשלח הוא באנגלית. כאן שולחים לכל אחד את ההוראות בעברית, מהוואטסאפ שלך.</p>
+      <ul class="rows wa-list">${people.map((m) => `<li class="row"><div class="main-col"><div class="title">${esc(m.name || m.email)}</div><div class="sub">${ok(m) ? `<span dir="ltr">${esc(m.phone)}</span>` : 'אין מספר טלפון בפרטי הפרויקט'}</div></div>
+        <div class="end">${ok(m) ? `<a class="btn btn-sm btn-primary" data-wa href="${esc(waLink(m.phone, inviteWaText(m.name)))}" target="_blank" rel="noopener">${icon('whatsapp')}שליחה</a>` : ''}</div></li>`).join('')}</ul>
+      <p class="small" style="margin:14px 0 6px"><b>או לקבוצה / למספר אחר:</b></p>
+      <a class="btn btn-ghost" data-wa href="https://wa.me/?text=${encodeURIComponent(inviteWaText())}" target="_blank" rel="noopener">${icon('whatsapp')}בחירת איש קשר או קבוצה</a>
+      <details class="more-fields" style="margin-top:14px"><summary>איך ההודעה נראית</summary><pre class="wa-preview">${esc(inviteWaText((people.find(ok) || people[0] || {}).name || ''))}</pre></details>`,
+    foot: `<button class="btn btn-ghost" data-close>סגירה</button>`,
+    onOpen(el) {
+      el.querySelectorAll('[data-wa]').forEach((a) => a.addEventListener('click', () => { a.classList.add('sent'); a.innerHTML = `${icon('check')}נפתח בוואטסאפ`; }));
     },
   });
 }
@@ -917,9 +1052,15 @@ async function fillProjectUsers(box) {
   box.innerHTML = `<ul class="rows">${list.map((m) => `<li class="row">
     <div class="main-col"><div class="title" dir="ltr" style="text-align:right">${esc(m.email)}</div><div class="sub">${esc(m.role)} · הוזמן ${fmtDate(m.invited_at)}</div></div>
     <div class="end">${m.accepted_at ? pill('green', 'נכנס למערכת') : pill('yellow', 'עוד לא נכנס')}
-      ${isJorge() ? `<button class="btn btn-sm btn-quiet" data-resend="${esc(m.email)}">שליחת קישור</button>
+      ${isJorge() ? `<button class="btn btn-sm btn-quiet" data-wainv="${esc(m.email)}" title="הוראות כניסה בוואטסאפ">${icon('whatsapp')}</button>
+      <button class="btn btn-sm btn-quiet" data-resend="${esc(m.email)}">שליחת קישור</button>
       <button class="btn btn-sm btn-quiet" data-remove="${esc(m.email)}">הסרה</button>` : ''}</div>
   </li>`).join('')}</ul>`;
+  box.querySelectorAll('[data-wainv]').forEach((b) => (b.onclick = () => {
+    const e = b.dataset.wainv.toLowerCase();
+    const m = (Store.data.members || []).find((x) => String(x.email || '').trim().toLowerCase() === e) || { email: e };
+    inviteWhatsApp([m]);
+  }));
   box.querySelectorAll('[data-resend]').forEach((b) => (b.onclick = async () => {
     b.disabled = true;
     try { await Live.sendLink(b.dataset.resend); toast('קישור כניסה נשלח ל־' + b.dataset.resend); } catch (e) { toast('השליחה נכשלה: ' + e.message); }
