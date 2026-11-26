@@ -32,7 +32,20 @@ const Live = {
     const { data: roles } = await this.sb.rpc('my_roles');
     this.roles = Object.fromEntries((roles || []).map((r) => [r.project_id, r.role]));
     await this.loadRows();
+    await this.loadDocCats();
     return true;
+  },
+
+  // Document categories the team added: one list for all projects.
+  docCats: [],
+  async loadDocCats() {
+    const { data } = await this.sb.from('doc_categories').select('name').order('created_at');
+    this.docCats = (data || []).map((r) => r.name);
+  },
+  async addDocCategory(name) {
+    const { error } = await this.sb.from('doc_categories').insert({ name });
+    if (error && error.code !== '23505') throw error; // 23505: someone already added it
+    if (!this.docCats.includes(name)) this.docCats.push(name);
   },
 
   roles: {},
