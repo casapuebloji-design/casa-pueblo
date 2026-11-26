@@ -1002,3 +1002,4 @@ fieldset.inv-pays legend { font-size: 13px; font-weight: 600; color: var(--ink-2
 .help-areas li { display: flex; flex-direction: column; padding: 8px 0; border-top: 1px solid var(--line); }
 .help-areas a { font-weight: 700; color: inherit; }
 .help-areas span { font-size: 14px; opacity: .8; }
+.field[hidden] { display: none; }

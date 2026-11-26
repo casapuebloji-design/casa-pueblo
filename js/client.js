@@ -871,7 +871,8 @@ Pages.photos = (q) => {
 Pages.documents = (q) => {
   const d = Store.data;
   const cat = q.cat || 'הכול';
-  const used = DOC_CATEGORIES.filter((c) => d.documents.some((x) => x.cat === c));
+  const all = docCategories(d);
+  const used = [...all, ...d.documents.map((x) => x.cat).filter((c) => c && !all.includes(c))].filter((c, i, a) => a.indexOf(c) === i && d.documents.some((x) => x.cat === c));
   const list = d.documents.filter((x) => cat === 'הכול' || x.cat === cat).sort((a, b) => b.date.localeCompare(a.date));
   return {
     title: 'מסמכים והסכמים',
@@ -951,26 +952,48 @@ async function fillInternalDocs(box) {
   });
 }
 
+// The fixed categories, then the ones the team added in this project.
+function docCategories(d) { return [...DOC_CATEGORIES, ...(d.docCategories || []).filter((c) => !DOC_CATEGORIES.includes(c))]; }
+
 function uploadDocFlow() {
+  const canAdd = staffMode();
   openModal({
     title: 'העלאת מסמך',
     body: `
       <label class="field"><span>קובץ</span><input class="input" type="file" id="ud-file"></label>
       <label class="field"><span>שם המסמך</span><input class="input" id="ud-title" placeholder="למשל: חשבונית וילונות"></label>
-      <label class="field"><span>קטגוריה</span><select class="input" id="ud-cat">${DOC_CATEGORIES.filter((c) => c !== INV_CAT || isJorge()).map((c) => `<option>${c}</option>`).join('')}</select></label>`,
+      <label class="field"><span>קטגוריה</span><select class="input" id="ud-cat">${docCategories(Store.data).filter((c) => c !== INV_CAT || isJorge()).map((c) => `<option>${esc(c)}</option>`).join('')}${canAdd ? '<option value="__new">+ קטגוריה חדשה…</option>' : ''}</select></label>
+      <label class="field" id="ud-new-f" hidden><span>שם הקטגוריה החדשה</span><input class="input" id="ud-new" placeholder="למשל: היתרים"></label>`,
     foot: `<button class="btn btn-primary" id="ud-save">${icon('upload')}העלאה</button>`,
     onOpen(el) {
       // Casa Pueblo's own invoices have their own form, which also links them to the payments they cover.
-      el.querySelector('#ud-cat').onchange = (e) => { if (e.target.value === INV_CAT) { closeModal(); invoiceForm(); } };
+      el.querySelector('#ud-cat').onchange = (e) => {
+        if (e.target.value === INV_CAT) { closeModal(); invoiceForm(); return; }
+        const isNew = e.target.value === '__new';
+        el.querySelector('#ud-new-f').hidden = !isNew;
+        if (isNew) el.querySelector('#ud-new').focus();
+      };
       el.querySelector('#ud-save').onclick = async (ev) => {
         const f = el.querySelector('#ud-file').files[0];
         if (Store.live && !f) { el.querySelector('#ud-file').focus(); return toast('צריך לבחור קובץ'); }
+        let cat = el.querySelector('#ud-cat').value;
+        let newCat = '';
+        if (cat === '__new') {
+          newCat = el.querySelector('#ud-new').value.trim();
+          if (!newCat) { el.querySelector('#ud-new').focus(); return toast('צריך לכתוב שם לקטגוריה'); }
+          const same = docCategories(Store.data).find((c) => c === newCat);
+          if (same) newCat = ''; // already exists: just use it
+          cat = same || newCat;
+        }
         ev.target.disabled = true;
         let path = '';
         try { path = await storeFile(f); } catch (e) { ev.target.disabled = false; return; }
         const title = el.querySelector('#ud-title').value.trim() || (f && f.name) || 'מסמך חדש';
         const ext = f ? (f.name.split('.').pop() || 'PDF').toUpperCase().slice(0, 4) : 'PDF';
-        const cat = el.querySelector('#ud-cat').value;
+        if (newCat) {
+          Store.data.docCategories = [...(Store.data.docCategories || []), newCat];
+          Store.log(`הוסיף קטגוריית מסמכים: ${newCat}`);
+        }
         Store.data.documents.unshift({ id: 'd' + Date.now(), cat, title, date: TODAY, type: ext, size: f ? (f.size / 1048576).toFixed(1) + 'MB' : '—', path });
         Store.log(`העלה מסמך: ${title}`);
         Store.save();
